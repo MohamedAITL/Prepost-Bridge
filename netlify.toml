@@ -21,6 +21,8 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "DENY"
+    # Prepost may be shown inside your own app (chdl.lovable.app, plus Lovable's editor preview);
+    # every other site is refused.
+    Content-Security-Policy = "frame-ancestors 'self' https://chdl.lovable.app https://*.lovable.app https://*.lovableproject.com https://lovable.dev"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
