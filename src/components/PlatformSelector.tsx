@@ -1,13 +1,11 @@
 import type { ReactNode } from 'react';
-import { SignInIcon } from '@phosphor-icons/react';
-import { DESTINATION_MODULE, DESTINATIONS, type DestinationId, type ModuleId } from '../types/platform';
+import { DESTINATIONS, type DestinationId } from '../types/platform';
 import type { Draft } from '../types/content';
 import { BRAND_NAMES, PlatformLogo } from './Brand';
 
 interface Props {
   platforms: Draft['platforms'];
   onToggle: (d: DestinationId, enabled: boolean) => void;
-  onOpenPlatform: (m: ModuleId) => void;
   /** Rendered inside the Meta row when it's on (the Page checkboxes). */
   metaPagePicker?: ReactNode;
   /** Rendered inside the YouTube row when it's on (the channel choice). */
@@ -22,7 +20,7 @@ const SUBTITLE: Record<DestinationId, string> = {
   tiktok: 'Video or photos',
 };
 
-export function PlatformSelector({ platforms, onToggle, onOpenPlatform, metaPagePicker, youtubeChannelPicker }: Props) {
+export function PlatformSelector({ platforms, onToggle, metaPagePicker, youtubeChannelPicker }: Props) {
   return (
     <ul className="platform-list">
       {DESTINATIONS.map((d) => {
@@ -40,9 +38,6 @@ export function PlatformSelector({ platforms, onToggle, onOpenPlatform, metaPage
                 </span>
                 <input type="checkbox" role="switch" className="switch" checked={on} onChange={(e) => onToggle(d, e.target.checked)} aria-label={`Post to ${BRAND_NAMES[d]}`} />
               </label>
-              <button type="button" className="btn icon ghost" onClick={() => onOpenPlatform(DESTINATION_MODULE[d])} title={`Open ${BRAND_NAMES[d]} (to sign in)`} aria-label={`Open ${BRAND_NAMES[d]} to sign in`}>
-                <SignInIcon size={18} />
-              </button>
             </div>
             {d === 'facebook' && on && metaPagePicker}
             {d === 'youtube' && on && youtubeChannelPicker}

@@ -16,7 +16,7 @@ import { PlatformSelector } from '../components/PlatformSelector';
 import { SettingsMenu } from '../components/SettingsMenu';
 import { YouTubeChannelPicker } from '../components/YouTubeChannelPicker';
 import { useDraft } from '../hooks/useDraft';
-import { ACTIVE_STATUSES, type BrowserState, type JobSnapshot, type ModuleId } from '../types/platform';
+import { ACTIVE_STATUSES, type BrowserState, type JobSnapshot } from '../types/platform';
 
 function errorText(e: unknown): string {
   if (e instanceof ApiError && Array.isArray(e.details)) {
@@ -277,7 +277,6 @@ export function Dashboard() {
                 return next;
               })
             }
-            onOpenPlatform={(m: ModuleId) => run(() => api.openPlatform(m))}
             metaPagePicker={
               <MetaPagePicker
                 pages={metaPages}

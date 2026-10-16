@@ -34,8 +34,31 @@
   font-feature-settings: 'ss01';
 }
 
+:root[data-theme='dark'] {
+  --bg: #141412;
+  --surface: #1c1b19;
+  --surface-2: #242320;
+  --surface-3: #2d2b27;
+  --border: #312f2b;
+  --border-strong: #423f39;
+  --text: #edebe6;
+  --muted: #a19c92;
+  --accent: #5db394;
+  --accent-hover: #72c2a5;
+  --accent-soft: #1d3029;
+  --accent-ink: #0e1b16;
+  --danger: #ec7f74;
+  --danger-soft: #3a2220;
+  --warn: #e2b55a;
+  --warn-soft: #362c19;
+  --ok: #6cc893;
+  --ok-soft: #1b2f23;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -10px rgb(0 0 0 / 0.5);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.35), 0 18px 36px -12px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root[data-theme='auto'] {
     --bg: #141412;
     --surface: #1c1b19;
     --surface-2: #242320;
@@ -506,6 +529,16 @@ select.input {
 .segmented button:hover {
   color: var(--text);
 }
+.segmented.full {
+  display: flex;
+}
+.segmented.full button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
 .segmented button.is-on {
   background: var(--surface);
   color: var(--text);
@@ -753,7 +786,7 @@ progress {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 10px 8px 10px 12px;
+  padding: 10px 12px;
 }
 .platform-toggle {
   flex: 1;

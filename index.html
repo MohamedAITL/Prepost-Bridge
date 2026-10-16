@@ -7,6 +7,13 @@
     <meta name="theme-color" content="#1e6b57" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Prepost</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem('prepost.theme') || 'light';
+      } catch {
+        document.documentElement.dataset.theme = 'light';
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

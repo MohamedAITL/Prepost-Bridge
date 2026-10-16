@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { GearSixIcon } from '@phosphor-icons/react';
+import { DesktopIcon, GearSixIcon, MoonIcon, SunIcon } from '@phosphor-icons/react';
 import { api } from '../api';
 import type { BrowserMode, BrowserState } from '../types/platform';
 
@@ -15,9 +15,26 @@ const MODES: { value: BrowserMode; label: string; hint: string }[] = [
   { value: 'bundled', label: 'Built-in browser', hint: 'Playwright Chromium with its own profile' },
 ];
 
-/** Browser choice and connection controls, kept out of the way in a small popover. */
+type Theme = 'light' | 'dark' | 'auto';
+
+function readTheme(): Theme {
+  const t = document.documentElement.dataset.theme;
+  return t === 'dark' || t === 'auto' ? t : 'light';
+}
+
+function applyTheme(theme: Theme) {
+  document.documentElement.dataset.theme = theme;
+  try {
+    localStorage.setItem('prepost.theme', theme);
+  } catch {
+    /* storage unavailable: applies for this visit only */
+  }
+}
+
+/** Appearance, browser choice and connection controls, kept out of the way in a small popover. */
 export function SettingsMenu({ browser, busy, run }: Props) {
   const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme>(readTheme);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,7 +58,31 @@ export function SettingsMenu({ browser, busy, run }: Props) {
         <span>Settings</span>
       </button>
       {open && (
-        <div className="popover" role="dialog" aria-label="Browser settings">
+        <div className="popover" role="dialog" aria-label="Settings">
+          <p className="popover-title">Appearance</p>
+          <div className="segmented full" role="radiogroup" aria-label="Appearance">
+            {(
+              [
+                ['light', 'Light', SunIcon],
+                ['dark', 'Dark', MoonIcon],
+                ['auto', 'Auto', DesktopIcon],
+              ] as const
+            ).map(([value, label, Icon]) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={theme === value}
+                className={theme === value ? 'is-on' : ''}
+                onClick={() => {
+                  applyTheme(value);
+                  setTheme(value);
+                }}
+              >
+                <Icon size={15} aria-hidden /> {label}
+              </button>
+            ))}
+          </div>
           <p className="popover-title">Which browser prepares the posts</p>
           <div className="choice-list" role="radiogroup">
             {MODES.map((m) => (
