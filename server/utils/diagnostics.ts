@@ -10,7 +10,11 @@ import { config } from '../config';
 export async function savePageOutline(page: Page, label: string, note = ''): Promise<string | null> {
   if (page.isClosed()) return null;
   try {
-    const outline = await page.locator('body').ariaSnapshot({ timeout: 5000 });
+    // Heavy pages can time out the accessibility outline; fall back to the visible text.
+    const outline = await page
+      .locator('body')
+      .ariaSnapshot({ timeout: 8000 })
+      .catch(async () => `(plain text; outline unavailable)\n${await page.evaluate(() => document.body.innerText).catch(() => '')}`);
     const dir = path.join(config.logDir, 'diagnostics');
     await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
     const file = path.join(dir, `${label}-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`);

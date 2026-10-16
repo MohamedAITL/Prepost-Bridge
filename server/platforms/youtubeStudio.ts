@@ -51,8 +51,9 @@ const foldName = (t: string) =>
 
 /** Name of the channel YouTube is currently acting as (heading of the channel page). */
 async function activeChannelName(page: Page): Promise<string | null> {
-  await page.goto(YT.post.profileUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-  if (!(await pollUntil(async () => YT.post.channelUrl.test(page.url()), 20_000))) return null;
+  // Right after a channel switch YouTube is still redirecting: a slow load isn't an error.
+  await page.goto(YT.post.profileUrl, { waitUntil: 'commit', timeout: 60_000 }).catch(() => undefined);
+  if (!(await pollUntil(async () => YT.post.channelUrl.test(page.url()), 30_000))) return null;
   const heading = page.getByRole('heading', { level: 1 }).filter({ visible: true }).first();
   return pollUntil(async () => ((await heading.innerText().catch(() => '')).trim() || null), 15_000);
 }
@@ -228,13 +229,22 @@ export const youtubeStudioModule: PlatformModule = {
     }
 
     if (content.thumbnail) {
-      const thumbInput = await findAttached(page, YT.thumbnailInput, 10_000);
-      if (!thumbInput) {
-        ctx.check('Custom thumbnail', 'unverified', 'No thumbnail upload control found. Custom thumbnails need a verified channel.');
-      } else {
-        await ctx.step('Upload thumbnail', () => setFiles(thumbInput, [content.thumbnail!.path]));
-        const shown = await findVisible(page, YT.thumbnailPreview, 20_000);
-        ctx.check('Custom thumbnail', shown ? 'pass' : 'unverified', shown ? undefined : 'Could not confirm the thumbnail preview; check it in the dialog.');
+      // Optional: a thumbnail problem is reported, never fails the whole preparation.
+      try {
+        const thumbInput = await findAttached(page, YT.thumbnailInput, 10_000);
+        if (!thumbInput) {
+          ctx.check('Custom thumbnail', 'unverified', 'No thumbnail upload control found. Custom thumbnails need a verified channel.');
+          await ctx.snapshot('youtube-thumbnail');
+        } else {
+          await thumbInput.setInputFiles([content.thumbnail.path], { timeout: 20_000 });
+          const shown = await findVisible(page, YT.thumbnailPreview, 20_000);
+          ctx.check('Custom thumbnail', shown ? 'pass' : 'unverified', shown ? undefined : 'Could not confirm the thumbnail; check it in the dialog.');
+          if (!shown) await ctx.snapshot('youtube-thumbnail');
+        }
+      } catch (e) {
+        ctx.log(`Thumbnail step: ${(e as Error).message.split('\n')[0]}`, 'warn');
+        ctx.check('Custom thumbnail', 'unverified', 'Could not set the thumbnail automatically; add it in the dialog.');
+        await ctx.snapshot('youtube-thumbnail');
       }
     }
 

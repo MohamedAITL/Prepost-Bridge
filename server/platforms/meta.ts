@@ -96,13 +96,21 @@ async function countMediaPreviews(page: Page): Promise<number> {
   );
 }
 
-/** A determinate progress bar below 100% (spinners and other indeterminate bars are ignored). */
+/**
+ * A determinate upload progress bar below 100%. Ignores indeterminate spinners and the seek bar of
+ * the video preview player (it's also a progressbar, and stays below 100% while paused).
+ */
 async function uploadInProgress(page: Page): Promise<boolean> {
   return page.locator('[role="progressbar"][aria-valuenow]').evaluateAll((els) =>
     els.some((el) => {
       const r = el.getBoundingClientRect();
       const now = Number(el.getAttribute('aria-valuenow'));
       const max = Number(el.getAttribute('aria-valuemax') || 100);
+      const label = `${el.getAttribute('aria-label') ?? ''} ${el.getAttribute('aria-valuetext') ?? ''}`;
+      let n: Element | null = el;
+      let inPlayer = false;
+      for (let i = 0; i < 6 && n; i++, n = n.parentElement) if (n.querySelector('video')) inPlayer = true;
+      if (inPlayer || /play|seek|volume|time|lecture|durée/i.test(label)) return false;
       return r.width > 0 && r.height > 0 && now < max;
     }),
   );
@@ -387,7 +395,9 @@ export const metaModule: PlatformModule = {
           const shown = (await countMediaPreviews(page)) - before;
           const busy = await uploadInProgress(page);
           const { enabled } = await observeOnly(publish);
-          enabledSince = enabled && !busy ? enabledSince || Date.now() : 0;
+          // Reels: Next stays disabled until the upload is done, so it alone is enough. Posts: Publish
+          // can be enabled by the text alone, so also require no (real) upload bar.
+          enabledSince = enabled && (reel || !busy) ? enabledSince || Date.now() : 0;
           ctx.setStatus('uploading', `Media previews: ${Math.max(0, Math.min(shown, expected))}/${expected}${busy ? ' (uploading…)' : ''}`, 65);
           if (shown >= expected && !busy) return 'counted';
           // Meta enables Publish once uploads are done; a few steady seconds is a reliable signal.
