@@ -59,7 +59,7 @@ export function EngineSetup({ onRetry }: { onRetry: () => void }) {
             <CopyLine text="npm start" />
           </li>
           <li>
-            <strong>Add the Chrome extension</strong> once: open <code>chrome://extensions</code>, turn on Developer mode, click <em>Load unpacked</em> and choose the <code>extension</code> folder. The dashboard then shows your pairing code.
+            <strong>Add the Chrome extension</strong> once: open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>), turn on Developer mode, click <em>Load unpacked</em> and choose the <code>extension</code> folder. The dashboard then shows your pairing code.
           </li>
         </ol>
         <div className="setup-foot">

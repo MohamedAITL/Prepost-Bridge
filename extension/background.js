@@ -70,13 +70,30 @@ async function waitForTabLoaded(tabId) {
   }
 }
 
+// A normal browser window to open tabs in. Without one, Chrome/Edge reject tabs.create with
+// "No current window" (e.g. all windows closed while the browser keeps running, or a popup or
+// app window is focused). Opens a window, without focusing it, if there's none.
+async function targetWindowId() {
+  try {
+    const win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+    if (win && win.id !== undefined && win.type === 'normal') return win.id;
+  } catch {
+    /* no focused window */
+  }
+  const all = await chrome.windows.getAll({ windowTypes: ['normal'] });
+  if (all.length) return all[0].id;
+  const created = await chrome.windows.create({ focused: false, url: 'about:blank' });
+  return created.id;
+}
+
 async function handle(msg) {
   const reply = (result) => send({ id: msg.id, result: result ?? {} });
   const fail = (e) => send({ id: msg.id, error: (e && e.message) || String(e) });
   try {
     switch (msg.type) {
       case 'createTab': {
-        const tab = await chrome.tabs.create({ url: msg.url || 'about:blank', active: !!msg.active });
+        const windowId = await targetWindowId();
+        const tab = await chrome.tabs.create({ windowId, url: msg.url || 'about:blank', active: !!msg.active });
         await waitForTabLoaded(tab.id);
         await chrome.debugger.attach({ tabId: tab.id }, '1.3');
         controlled.add(tab.id);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Prepost Bridge",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Lets the local Prepost engine prepare (never publish) posts in tabs it opens in this Chrome profile.",
   "permissions": ["debugger", "tabs", "storage", "alarms"],
   "host_permissions": ["http://127.0.0.1/*"],

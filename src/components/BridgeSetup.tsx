@@ -37,7 +37,7 @@ export function BridgeSetup({ browser }: { browser: BrowserState }) {
       </div>
       <ol className="steps">
         <li>
-          In the Chrome profile where you're signed in to your accounts, open <code>chrome://extensions</code> and turn on <strong>Developer mode</strong>.
+          In the Chrome profile where you're signed in to your accounts, open <code>chrome://extensions</code> (in Edge: <code>edge://extensions</code>) and turn on <strong>Developer mode</strong>.
         </li>
         <li>
           Click <strong>Load unpacked</strong> and choose this folder (in the picker, press ⌘⇧G and paste):
