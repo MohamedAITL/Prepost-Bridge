@@ -211,8 +211,8 @@ function buildSingle(draft: Draft, d: DestinationId): DestinationContent {
   }
 
   // Cover / thumbnail for video posts.
+  // A cover whose image is gone simply means "no custom cover".
   const cover = draft.coverId ? (draft.media.find((m) => m.id === draft.coverId) ?? null) : null;
-  if (draft.coverId && !cover) issues.push({ level: 'error', message: 'The selected cover image was removed.' });
   if (cover && videos.length && d !== 'instagram') {
     const supported = (d === 'youtube' && draft.youtube.postType === 'video') || d === 'tiktok' || (d === 'facebook' && draft.meta.videoAs === 'reel');
     const rule = COVER_RULES[d];

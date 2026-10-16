@@ -65,7 +65,18 @@ export function Dashboard() {
       .then(() => {
         if (!alive) return;
         setEngine('up');
-        api.listMedia().then((media) => update((d) => ({ ...d, media })));
+        // The engine may have restarted (it clears uploads): drop references to files it no longer has.
+        api.listMedia().then((media) =>
+          update((d) => {
+            const ids = new Set(media.map((m) => m.id));
+            return {
+              ...d,
+              media,
+              coverId: d.coverId && ids.has(d.coverId) ? d.coverId : null,
+              platforms: Object.fromEntries(Object.entries(d.platforms).map(([k, v]) => [k, v.mediaIds ? { ...v, mediaIds: v.mediaIds.filter((x) => ids.has(x)) } : v])) as typeof d.platforms,
+            };
+          }),
+        );
         api.getMetaPages().then(({ pages }) => applyMetaPages(pages));
         api.getYouTubeChannels().then(({ channels }) => applyYtChannels(channels));
       })

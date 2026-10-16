@@ -136,3 +136,14 @@ test('YouTube post mode: text-only or up to 10 images; videos and >10 images are
   d.media = [vid('v')];
   assert.ok(errors(d, 'youtube').some((m) => /does not accept videos/.test(m)));
 });
+
+test('a cover whose image is gone is ignored, not an error', () => {
+  const d = draftWith((x) => {
+    x.sharedText = 'Video';
+    x.media = [vid('v')];
+    x.coverId = 'gone';
+    x.platforms.tiktok.enabled = true;
+  });
+  assert.deepEqual(errors(d, 'tiktok'), []);
+  assert.equal(buildDestinationContent(d, 'tiktok').thumbnail ?? null, null);
+});
