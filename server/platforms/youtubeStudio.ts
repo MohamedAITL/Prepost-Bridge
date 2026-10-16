@@ -50,25 +50,48 @@ const foldName = (t: string) =>
     .trim();
 
 /** Name of the channel YouTube is currently acting as (heading of the channel page). */
+/** A youtube.com channel page (not YouTube Studio, whose addresses also contain /channel/). */
+export const CHANNEL_PAGE = /^https:\/\/(www\.|m\.)?youtube\.com\/(@[^/?#]+|channel\/[^/?#]+)/;
+
+/** Name of the channel YouTube is currently acting as (heading of its channel page). */
 async function activeChannelName(page: Page): Promise<string | null> {
   // Right after a channel switch YouTube is still redirecting: a slow load isn't an error.
   await page.goto(YT.post.profileUrl, { waitUntil: 'commit', timeout: 60_000 }).catch(() => undefined);
-  if (!(await pollUntil(async () => YT.post.channelUrl.test(page.url()), 30_000))) return null;
+  if (!(await pollUntil(async () => CHANNEL_PAGE.test(page.url()), 30_000))) return null;
   const heading = page.getByRole('heading', { level: 1 }).filter({ visible: true }).first();
-  return pollUntil(async () => ((await heading.innerText().catch(() => '')).trim() || null), 15_000);
+  // Read until the heading is non-empty and the same twice in a row (the page renders in stages).
+  let last = '';
+  return pollUntil(async () => {
+    if (!CHANNEL_PAGE.test(page.url())) return null;
+    const text = (await heading.innerText({ timeout: 3000 }).catch(() => '')).trim();
+    const stable = text && text === last ? text : null;
+    last = text;
+    return stable;
+  }, 20_000, 700);
 }
 
-async function switcherItems(page: Page) {
-  await page.goto(YT.channels.switcherUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-  await pollUntil(async () => (await page.locator(YT.channels.item).count()) > 0, 20_000);
-  const items = page.locator(YT.channels.item);
-  const out: { channel: YouTubeChannel; item: Locator }[] = [];
-  for (let i = 0; i < (await items.count()); i++) {
-    const lines = (await items.nth(i).innerText().catch(() => '')).split('\n').map((l) => l.trim()).filter(Boolean);
-    if (!lines.length) continue;
-    out.push({ channel: { name: lines[0], handle: lines.find((l) => l.startsWith('@')) ?? '' }, item: items.nth(i) });
-  }
-  return out;
+/** The channel switcher's entries; with `want`, keeps reading until that channel has loaded. */
+async function switcherItems(page: Page, want?: string) {
+  await page.goto(YT.channels.switcherUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => undefined);
+  const read = async () => {
+    const items = page.locator(YT.channels.item);
+    const out: { channel: YouTubeChannel; item: Locator }[] = [];
+    const n = await items.count();
+    for (let i = 0; i < n; i++) {
+      const lines = (await items.nth(i).innerText({ timeout: 3000 }).catch(() => '')).split('\n').map((l) => l.trim()).filter(Boolean);
+      if (lines.length) out.push({ channel: { name: lines[0], handle: lines.find((l) => l.startsWith('@')) ?? '' }, item: items.nth(i) });
+    }
+    return out;
+  };
+  // The list fills in progressively: wait for the wanted channel, or for the list to stop growing.
+  let lastCount = -1;
+  const found = await pollUntil(async () => {
+    const list = await read();
+    if (want ? list.some((c) => foldName(c.channel.name) === foldName(want)) : list.length > 0 && list.length === lastCount) return list;
+    lastCount = list.length;
+    return null;
+  }, 20_000, 800);
+  return found ?? (await read());
 }
 
 /** The channels this Google account can switch to (from YouTube's channel switcher). */
@@ -92,19 +115,22 @@ async function ensureChannel(ctx: PrepareContext, name: string) {
     ctx.check(`Channel "${name}"`, 'pass');
     return;
   }
-  ctx.setStatus('preparing', `Switching YouTube to "${name}"…`, 12);
-  const entry = (await switcherItems(page)).find((c) => foldName(c.channel.name) === foldName(name));
-  if (entry) {
-    const before = page.url();
-    await safeClick(entry.item, `Channel "${name}"`, { forbiddenSelectors: YT.forbidden });
-    await pollUntil(async () => page.url() !== before, 20_000, 500);
-  } else {
-    ctx.log(`"${name}" is not on the channel switcher`, 'warn');
-  }
-  const now = await activeChannelName(page);
-  if (now && foldName(now) === foldName(name)) {
-    ctx.check(`Channel "${name}"`, 'pass', current ? `Switched from "${current}"` : undefined);
-    return;
+  let now = current;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    ctx.setStatus('preparing', `Switching YouTube to "${name}"${attempt > 1 ? ' (second try)' : ''}…`, 12);
+    const entry = (await switcherItems(page, name)).find((c) => foldName(c.channel.name) === foldName(name));
+    if (entry) {
+      const before = page.url();
+      await safeClick(entry.item, `Channel "${name}"`, { forbiddenSelectors: YT.forbidden });
+      await pollUntil(async () => page.url() !== before, 20_000, 500);
+    } else {
+      ctx.log(`"${name}" did not appear on the channel switcher (attempt ${attempt})`, 'warn');
+    }
+    now = await activeChannelName(page);
+    if (now && foldName(now) === foldName(name)) {
+      ctx.check(`Channel "${name}"`, 'pass', current ? `Switched from "${current}"` : undefined);
+      return;
+    }
   }
   await ctx.snapshot('youtube-channel');
   ctx.setStatus('needs_attention', `Please switch YouTube to "${name}"`, 12);
