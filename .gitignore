@@ -1,0 +1,8 @@
+node_modules
+dist
+dist-*
+*.log
+.dev.log
+.scratch*
+.DS_Store
+.env

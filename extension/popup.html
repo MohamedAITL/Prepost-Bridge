@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font: 13px system-ui, sans-serif; width: 280px; margin: 12px; color: #1c1f24; }
+      h1 { font-size: 14px; margin: 0 0 8px; }
+      label { display: block; margin: 8px 0 4px; font-weight: 600; }
+      input { width: 100%; box-sizing: border-box; padding: 6px; font: inherit; }
+      button { margin-top: 10px; padding: 6px 12px; font: inherit; cursor: pointer; }
+      .status { padding: 6px 8px; border-radius: 6px; background: #eef0f3; }
+      .connected { background: #e6f4ea; color: #1f7a43; }
+      p { color: #646b75; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Prepost Bridge</h1>
+    <div id="status" class="status">…</div>
+    <label for="token">Pairing code</label>
+    <input id="token" autocomplete="off" spellcheck="false" />
+    <label for="port">App port</label>
+    <input id="port" type="number" value="5174" />
+    <button id="save">Save &amp; connect</button>
+    <p>Only connects to the app on 127.0.0.1. It controls only tabs the app opens and never presses Publish.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>

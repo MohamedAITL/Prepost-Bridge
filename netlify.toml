@@ -1,0 +1,26 @@
+# The hosted dashboard. The automation engine can't run here (it needs a real browser and each
+# person's own logins), so the dashboard talks to the engine on the visitor's own computer.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # Where the dashboard finds the engine on each person's computer.
+  VITE_ENGINE_URL = "http://127.0.0.1:5174"
+  # Shown on the setup screen ("git clone ..."). Set it to your repository's URL.
+  VITE_REPO_URL = ""
+  # Netlify only builds the web page; it never needs Playwright's browsers.
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
