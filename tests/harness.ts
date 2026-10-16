@@ -19,6 +19,8 @@ export function testContext(page: Page, content: JobContent) {
     },
     throwIfCancelled: () => undefined,
     snapshot: async () => undefined,
+    showTab: async () => undefined,
+    hideTab: async () => undefined,
   };
   return { ctx, checks, statuses, waits };
 }

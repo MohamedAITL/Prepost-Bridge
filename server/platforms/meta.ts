@@ -372,6 +372,8 @@ export const metaModule: PlatformModule = {
       await ctx.step('Fill post text', () => fillTextField(page, box!, content.text));
     }
 
+    const withVideo = content.media.some((m) => m.item.kind === 'video');
+    if (withVideo) await ctx.showTab('the video uploads');
     if (content.media.length) {
       ctx.setStatus('uploading', `Uploading ${content.media.length} file(s)…`, 55);
       const before = await countMediaPreviews(page);
@@ -421,6 +423,7 @@ export const metaModule: PlatformModule = {
 
     if (reel && content.thumbnail) await ctx.step('Set Reel thumbnail', () => setReelThumbnail(ctx, page, content.thumbnail!.path));
     if (reel) await advanceReel(ctx, page);
+    await ctx.hideTab();
 
     const publish = await observeOnly(page.getByRole('button', { name: META.publishButton }));
     ctx.check(`${reel ? 'Reel' : 'Composer'} ready; Share/Publish left for you (not clicked)`, publish.visible ? 'pass' : 'unverified');

@@ -59,6 +59,8 @@ interface Job {
   /** Extension mode: the Chrome tab id, kept after the tab is released so it can still be shown. */
   bridgeTabId: number | null;
   released: boolean;
+  /** Set while this job's tab is shown for an upload. */
+  foreground: { restore: () => Promise<void>; release: () => void } | null;
   cancelled: boolean;
   resume: (() => void) | null;
   abortWait: ((e: Error) => void) | null;
@@ -178,6 +180,7 @@ class AutomationManager extends EventEmitter {
       page: null,
       bridgeTabId: null,
       released: false,
+      foreground: null,
       cancelled: false,
       resume: null,
       abortWait: null,
@@ -249,7 +252,42 @@ class AutomationManager extends EventEmitter {
       },
       waitForUser: (message: string, opts: WaitForUserOptions = {}) => this.waitForUser(job, message, opts),
       snapshot: (label: string) => this.saveDiagnostics(job, label),
+      showTab: (reason: string) => this.showTab(job, page, reason),
+      hideTab: () => this.hideTab(job),
     };
+  }
+
+  /** Uploads take turns at being the visible tab. */
+  private foregroundQueue: Promise<void> = Promise.resolve();
+
+  private async showTab(job: Job, page: Page, reason: string) {
+    if (job.foreground || page.isClosed()) return;
+    let release!: () => void;
+    const turn = this.foregroundQueue;
+    this.foregroundQueue = new Promise<void>((r) => (release = r));
+    if (job.snap.status !== 'uploading' || !job.snap.message.startsWith('Waiting')) this.update(job, { message: 'Waiting for another upload to finish…' });
+    await turn;
+    if (job.cancelled) {
+      release();
+      return;
+    }
+    try {
+      const restore = await browserManager.showTab(page);
+      job.foreground = { restore, release };
+      this.jobLog(job, `Showing this tab while ${reason} (Chrome pauses uploads in hidden tabs)`);
+      this.update(job, { message: `Showing the tab while ${reason}…` });
+    } catch (e) {
+      release();
+      this.jobLog(job, `Could not show the tab: ${(e as Error).message}`, 'warn');
+    }
+  }
+
+  private async hideTab(job: Job) {
+    const fg = job.foreground;
+    if (!fg) return;
+    job.foreground = null;
+    await fg.restore().catch(() => undefined);
+    fg.release();
   }
 
   private waitForUser(job: Job, message: string, opts: WaitForUserOptions): Promise<void> {
@@ -345,6 +383,7 @@ class AutomationManager extends EventEmitter {
       this.update(job, { status: 'failed', failedStep: step ?? null, error: message, message: `Failed${step ? ` at "${step}"` : ''}: ${message}`, awaitingUser: null });
       this.jobLog(job, `Failed${step ? ` at "${step}"` : ''}: ${message}`, 'error');
     } finally {
+      await this.hideTab(job);
       // Extension mode: hand the tab back to the user so Chrome's debugging bar disappears.
       if (job.page && job.bridgeTabId != null) {
         job.released = true;

@@ -215,6 +215,7 @@ export const youtubeStudioModule: PlatformModule = {
 
     ctx.setStatus('uploading', `Uploading ${video.item.name}…`, 25);
     const input = await ctx.step('Locate video file input', () => requireAttached(page, YT.fileInput, 20_000, 'video file input'));
+    await ctx.showTab('the video uploads');
     await ctx.step('Select video file', () => setFiles(input, [video.path]));
 
     const title = await ctx.step('Wait for the Details form', () => requireVisible(page, YT.title, 120_000, 'title field'));
@@ -257,12 +258,12 @@ export const youtubeStudioModule: PlatformModule = {
     }
 
     ctx.setStatus('verifying', 'Verifying details…', 60);
-    const titleOk = await fieldContains(title, content.title ?? '');
-    ctx.check('Title matches', titleOk ? 'pass' : 'fail');
+    const titleOk = await fieldContains(title, content.title ?? '').catch(() => null);
+    ctx.check('Title matches', titleOk === null ? 'unverified' : titleOk ? 'pass' : 'fail', titleOk === null ? 'Could not read it back; check it in the dialog.' : undefined);
     if (content.text) {
       const desc = await findVisible(page, YT.description, 5000);
-      const ok = desc ? await fieldContains(desc, content.text) : false;
-      ctx.check('Description matches', ok ? 'pass' : 'fail');
+      const ok = desc ? await fieldContains(desc, content.text).catch(() => null) : null;
+      ctx.check('Description matches', ok === null ? 'unverified' : ok ? 'pass' : 'fail', ok === null ? 'Could not read it back; check it in the dialog.' : undefined);
     }
 
     if (yt.advanceToVisibilityStep && yt.audience !== 'unset') {
@@ -283,6 +284,7 @@ export const youtubeStudioModule: PlatformModule = {
     }
 
     const transferred = await ctx.step('Wait for video upload', () => waitForUploadTransfer(ctx, video.item.size));
+    await ctx.hideTab();
     const status = await progressText(page);
     ctx.check('Video file uploaded', transferred ? 'pass' : 'unverified', status || undefined);
 

@@ -123,3 +123,18 @@ test('opens a background tab in the user browser and runs the X module through t
   await assert.rejects(() => safeClick(page.locator('[data-testid=tweetButton]'), 'Post'), SafetyError);
   await page.close();
 });
+
+test('a frozen background tab is woken up by the extension (Chrome freezes CPU-heavy tabs)', async () => {
+  const page = await bridged.contexts()[0].newPage();
+  await page.goto(`${pagesBase}/x`);
+  // Freeze the tab the way Chrome does, from the user's side.
+  const userPage = userChrome.pages().find((p) => p.url().endsWith('/x'))!;
+  const cdp = await userChrome.newCDPSession(userPage);
+  await cdp.send('Page.setWebLifecycleState', { state: 'frozen' });
+  const started = Date.now();
+  // The keepalive runs every 4 s; the page must answer again shortly after.
+  const title = await page.evaluate(() => document.title);
+  assert.equal(title, 'X mock');
+  assert.ok(Date.now() - started < 12_000, `took ${Date.now() - started} ms`);
+  await page.close();
+});

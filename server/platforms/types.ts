@@ -36,6 +36,12 @@ export interface PrepareContext {
   /** Runs a named step; failures are reported with the step name. */
   step<T>(name: string, fn: () => Promise<T>): Promise<T>;
   waitForUser(message: string, opts?: WaitForUserOptions): Promise<void>;
+  /**
+   * Show this tab while a video uploads (Chrome pauses that work in hidden tabs). Uploads take
+   * turns; hideTab() (or the end of the job) gives the user their previous tab back.
+   */
+  showTab(reason: string): Promise<void>;
+  hideTab(): Promise<void>;
   /** Save the page outline locally for troubleshooting (no cookies, best effort). */
   snapshot(label: string): Promise<void>;
   throwIfCancelled(): void;

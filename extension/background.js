@@ -80,6 +80,7 @@ async function handle(msg) {
         await waitForTabLoaded(tab.id);
         await chrome.debugger.attach({ tabId: tab.id }, '1.3');
         controlled.add(tab.id);
+        await chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => undefined);
         // The automation identifies a page by Chrome's target id (= its main frame id).
         const targets = await chrome.debugger.getTargets();
         const target = targets.find((t) => t.tabId === tab.id);
@@ -92,6 +93,7 @@ async function handle(msg) {
           await waitForTabLoaded(tab.id);
           await chrome.debugger.attach({ tabId: tab.id }, '1.3');
           controlled.add(tab.id);
+          await chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => undefined);
         }
         const targets = await chrome.debugger.getTargets();
         const target = targets.find((t) => t.tabId === tab.id);
@@ -105,8 +107,13 @@ async function handle(msg) {
       }
       case 'activateTab': {
         const tab = await chrome.tabs.update(msg.tabId, { active: true });
-        await chrome.windows.update(tab.windowId, { focused: true });
+        // focusWindow: false shows the tab inside its window without pulling Chrome to the front.
+        if (msg.focusWindow !== false) await chrome.windows.update(tab.windowId, { focused: true });
         return reply();
+      }
+      case 'getActiveTab': {
+        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        return reply({ tabId: tab ? tab.id : null });
       }
       case 'closeTab':
         await detach(msg.tabId);
@@ -149,6 +156,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   return false;
 });
+
+// Keep automated tabs awake. Chrome freezes CPU-heavy background tabs (video upload pages,
+// especially with Energy Saver on); a frozen tab stops uploading and stops answering until you
+// look at it. Marking the tab "active" every few seconds un-freezes it.
+setInterval(() => {
+  for (const tabId of controlled) {
+    chrome.debugger.sendCommand({ tabId }, 'Page.setWebLifecycleState', { state: 'active' }).catch(() => undefined);
+  }
+}, 4000);
 
 // Reconnect when the app starts later, and keep the service worker alive while connected.
 chrome.alarms.create('bridge-retry', { periodInMinutes: 0.5 });

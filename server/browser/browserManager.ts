@@ -130,6 +130,23 @@ class BrowserManager extends EventEmitter {
     if (tabId != null) await cdpRelay.release(tabId);
   }
 
+  /**
+   * Make this tab the visible one in its window (Chrome pauses video work in hidden tabs) and
+   * return a function that puts back the tab the user was on.
+   */
+  async showTab(page: Page): Promise<() => Promise<void>> {
+    const tabId = this.bridgeTabs.get(page);
+    if (this.mode === 'extension' && tabId != null) {
+      const previous = await cdpRelay.activeTab().catch(() => null);
+      await cdpRelay.activate(tabId, { focusWindow: false });
+      return async () => {
+        if (previous != null && previous !== tabId) await cdpRelay.activate(previous, { focusWindow: false }).catch(() => undefined);
+      };
+    }
+    await page.bringToFront();
+    return async () => undefined;
+  }
+
   async focusBridgeTab(tabId: number) {
     await cdpRelay.activate(tabId);
   }

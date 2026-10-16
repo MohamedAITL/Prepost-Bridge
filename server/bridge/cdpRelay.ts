@@ -238,8 +238,14 @@ class CdpRelay extends EventEmitter {
   }
 
   /** Bring a tab (controlled or released) to the front. */
-  async activate(tabId: number) {
-    await this.callExtension({ type: 'activateTab', tabId });
+  async activate(tabId: number, opts: { focusWindow?: boolean } = {}) {
+    await this.callExtension({ type: 'activateTab', tabId, focusWindow: opts.focusWindow ?? true });
+  }
+
+  /** The tab the user is looking at (in the last focused Chrome window). */
+  async activeTab(): Promise<number | null> {
+    const r = await this.callExtension<{ tabId: number | null }>({ type: 'getActiveTab' }, 5000);
+    return r.tabId ?? null;
   }
 
   // ---------- Playwright side ----------

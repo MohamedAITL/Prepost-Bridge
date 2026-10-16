@@ -107,10 +107,15 @@ export function normalizeForCompare(text: string): string {
 }
 
 export async function readFieldText(locator: Locator): Promise<string> {
-  return locator.evaluate((el) => {
-    if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) return el.value;
-    return (el as HTMLElement).innerText ?? el.textContent ?? '';
-  });
+  // Bounded: an unresponsive page must not hang a check for the default 30 s.
+  return locator.evaluate(
+    (el) => {
+      if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) return el.value;
+      return (el as HTMLElement).innerText ?? el.textContent ?? '';
+    },
+    undefined,
+    { timeout: 10_000 },
+  );
 }
 
 export async function fieldContains(locator: Locator, expected: string): Promise<boolean> {
