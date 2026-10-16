@@ -1443,3 +1443,30 @@ progress {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------- editor view switch (Text | CHDL) ---------- */
+.editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.editor-head .field-label {
+  margin-bottom: 0;
+}
+.embed-frame {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--surface-2);
+  height: min(640px, 70vh);
+  resize: vertical;
+  min-height: 320px;
+}
+.embed-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
