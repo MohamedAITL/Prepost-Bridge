@@ -9,7 +9,7 @@
   # Where the dashboard finds the engine on each person's computer.
   VITE_ENGINE_URL = "http://127.0.0.1:5174"
   # Shown on the setup screen ("git clone ..."). Set it to your repository's URL.
-  VITE_REPO_URL = ""
+  VITE_REPO_URL = "https://github.com/MohamedAITL/Prepost-Bridge.git"
   # Netlify only builds the web page; it never needs Playwright's browsers.
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
 
