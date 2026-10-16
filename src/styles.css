@@ -1460,7 +1460,9 @@ progress {
   border-radius: var(--r-md);
   overflow: hidden;
   background: var(--surface-2);
-  height: min(640px, 70vh);
+  /* Tall enough for every CHDL tool with text entered (tallest measured: ~990 px), so the
+     embedded app shows without its own scrollbar. Drag the corner to adjust. */
+  height: 1000px;
   resize: vertical;
   min-height: 320px;
 }
