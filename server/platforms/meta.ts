@@ -1,5 +1,5 @@
 import type { Locator, Page } from 'playwright';
-import { fieldContains, fillTextField, findAttached, findVisible, pollUntil, requireVisible, setFiles, visibleText } from '../automation/helpers';
+import { fieldContains, fillTextField, findAttached, findVisible, pollUntil, requireVisible, setFiles, visibleText, openUrl } from '../automation/helpers';
 import { observeOnly, safeClick } from '../automation/safeActions';
 import { detectSessionWith, openWithSession } from '../automation/session';
 import { DESTINATION_LABELS, type MetaPage } from '../../shared/types';
@@ -222,7 +222,7 @@ let switchLock: Promise<unknown> = Promise.resolve();
 /** Fallback when the Page's id isn't known yet: switch from Home, then open its composer. */
 async function switchAsset(ctx: PrepareContext, page: Page, pageName: string, composerBase: string): Promise<boolean> {
   const run = switchLock.then(async () => {
-    await page.goto(META.homeUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await openUrl(page, META.homeUrl);
     if (!(await openAssetMenu(page))) {
       ctx.log('Could not open the business asset menu', 'warn');
       return false;
@@ -233,7 +233,7 @@ async function switchAsset(ctx: PrepareContext, page: Page, pageName: string, co
       return false;
     }
     rememberMetaAsset(pageName, id);
-    await page.goto(`${composerBase}?asset_id=${id}`, { waitUntil: 'domcontentloaded' });
+    await openUrl(page, `${composerBase}?asset_id=${id}`);
     await findVisible(page, META.textbox, 30_000);
     return waitForPostTo(page, pageName);
   });
@@ -284,7 +284,7 @@ async function readAssetRows(page: Page): Promise<{ page: MetaPage; radio: Locat
 
 /** Read the user's Pages from Business Suite's asset menu (opened in its own tab). */
 export async function readMetaPages(page: Page): Promise<MetaPage[]> {
-  await page.goto(META.homeUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await openUrl(page, META.homeUrl);
   const state = await pollUntil(async () => {
     const s = await metaModule.detectSession(page);
     return s === 'unknown' ? null : s;
@@ -329,7 +329,7 @@ export const metaModule: PlatformModule = {
     ctx.setStatus('preparing', 'Opening the post composer…', 20);
     let box = await findVisible(page, META.textbox, 30_000);
     if (!box) {
-      await page.goto(composerUrl, { waitUntil: 'domcontentloaded' });
+      await openUrl(page, composerUrl);
       box = await ctx.step('Locate composer', () => requireVisible(page, META.textbox, 45_000, 'post composer text box'));
     }
 

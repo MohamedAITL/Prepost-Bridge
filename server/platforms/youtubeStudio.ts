@@ -1,5 +1,5 @@
 import type { Locator, Page } from 'playwright';
-import { fieldContains, fillTextField, findAttached, findVisible, pollUntil, requireAttached, requireVisible, setFiles } from '../automation/helpers';
+import { fieldContains, fillTextField, findAttached, findVisible, pollUntil, requireAttached, requireVisible, setFiles, openUrl } from '../automation/helpers';
 import { observeOnly, safeClick } from '../automation/safeActions';
 import { detectSessionWith, openWithSession } from '../automation/session';
 import { YT } from './selectors/youtube';
@@ -97,7 +97,7 @@ async function switcherItems(page: Page, want?: string) {
 /** The channels this Google account can switch to (from YouTube's channel switcher). */
 export async function readYouTubeChannels(page: Page): Promise<YouTubeChannel[]> {
   const state = await pollUntil(async () => {
-    await page.goto(YT.channels.switcherUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await openUrl(page, YT.channels.switcherUrl);
     const s = await youtubeStudioModule.detectSession(page);
     return s === 'unknown' ? null : s;
   }, 30_000, 2000);
@@ -160,12 +160,12 @@ async function preparePost(ctx: PrepareContext) {
   await ctx.step('Open YouTube and check sign-in', () => openWithSession(ctx, youtubeStudioModule, P.profileUrl));
   if (content.youtube?.channel) {
     await ctx.step('Switch to the selected channel', () => ensureChannel(ctx, content.youtube!.channel));
-    await page.goto(P.profileUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await openUrl(page, P.profileUrl);
   }
   ctx.setStatus('preparing', 'Opening your channel\'s Posts tab…', 20);
   const channel = await pollUntil(async () => P.channelUrl.exec(page.url())?.[0] ?? null, 20_000);
   if (!channel) throw new Error('Could not find your YouTube channel. Make sure this Google account has a channel.');
-  await page.goto(`https://www.${channel}/posts`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await openUrl(page, `https://www.${channel}/posts`);
 
   const placeholder = await ctx.step('Locate the post composer', () => requireVisible(page, P.placeholder, 30_000, 'post composer'));
   await ctx.step('Open the post composer', () => safeClick(placeholder, 'Post composer', { forbiddenSelectors: YT.forbidden }));
@@ -227,7 +227,7 @@ export const youtubeStudioModule: PlatformModule = {
     await ctx.step('Open YouTube Studio and check sign-in', () => openWithSession(ctx, youtubeStudioModule, YT.uploadUrl));
     if (yt.channel) {
       await ctx.step('Switch to the selected channel', () => ensureChannel(ctx, yt.channel));
-      await page.goto(YT.uploadUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await openUrl(page, YT.uploadUrl);
     }
 
     ctx.setStatus('preparing', 'Opening the upload dialog…', 15);

@@ -1,4 +1,4 @@
-import { fieldContains, findVisible, pollUntil, requireAttached, requireVisible, setFiles, visibleText, fillTextField } from '../automation/helpers';
+import { fieldContains, findVisible, pollUntil, requireAttached, requireVisible, setFiles, visibleText, fillTextField, openUrl } from '../automation/helpers';
 import { observeOnly } from '../automation/safeActions';
 import { detectSessionWith, openWithSession } from '../automation/session';
 import { X } from './selectors/x';
@@ -19,7 +19,7 @@ export const xModule: PlatformModule = {
     // After a login redirect X may land on /home; the compose URL opens the composer dialog.
     let box = await findVisible(page, X.textbox, 15_000);
     if (!box) {
-      await page.goto(X.composeUrl, { waitUntil: 'domcontentloaded' });
+      await openUrl(page, X.composeUrl);
       box = await ctx.step('Locate post text box', () => requireVisible(page, X.textbox, 30_000, 'post text box'));
     }
 

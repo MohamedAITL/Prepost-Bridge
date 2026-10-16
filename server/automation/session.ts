@@ -1,6 +1,6 @@
 import type { Page } from 'playwright';
 import type { PlatformModule, PrepareContext, SessionState } from '../platforms/types';
-import { anyVisible, type Candidates } from './helpers';
+import { anyVisible, openUrl, type Candidates } from './helpers';
 
 export interface SessionSpec {
   loggedIn: Candidates;
@@ -53,7 +53,7 @@ export async function openWithSession(ctx: PrepareContext, mod: PlatformModule, 
   for (let attempt = 0; attempt < 4; attempt++) {
     ctx.throwIfCancelled();
     ctx.setStatus('opening', `Opening ${mod.label}…`, 5);
-    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await openUrl(page, targetUrl);
     const state = await settle(page, mod, 30_000);
     ctx.log(`Session state on ${mod.label}: ${state}`);
     if (state === 'logged_in') return;

@@ -25,6 +25,20 @@ function roots(page: Page): (Page | Frame)[] {
   return [page, ...page.frames().filter((f) => f !== page.mainFrame())];
 }
 
+/**
+ * Navigate, tolerating loads that are cut short because the site immediately moves on (a redirect,
+ * e.g. youtube.com/upload → YouTube Studio, or the page's own navigation). Chrome reports those as
+ * net::ERR_ABORTED even though the tab ends up in the right place; callers check where it landed.
+ */
+export async function openUrl(page: Page, url: string, timeoutMs = 60_000): Promise<void> {
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+  } catch (e) {
+    if (!/ERR_ABORTED|interrupted by another navigation|frame was detached|NS_BINDING_ABORTED/i.test((e as Error).message)) throw e;
+    await page.waitForLoadState('domcontentloaded', { timeout: timeoutMs }).catch(() => undefined);
+  }
+}
+
 /** Poll until `fn` returns a truthy value or the timeout expires. Returns null on timeout. */
 export async function pollUntil<T>(fn: () => Promise<T | null | undefined | false>, timeoutMs: number, intervalMs = 500): Promise<T | null> {
   const deadline = Date.now() + timeoutMs;
