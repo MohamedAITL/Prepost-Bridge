@@ -242,7 +242,7 @@ class BrowserManager extends EventEmitter {
     // On macOS, closing Chrome's last window leaves it running with no windows; it then refuses
     // automation ("Browser context management is not supported"). Open a window first.
     await ensureChromeWindow();
-    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${config.chromeDebugPort}`);
+    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${config.chromeDebugPort}`, { isLocal: true });
     const context = browser.contexts()[0] ?? (await browser.newContext());
     browser.on('disconnected', () => {
       logger.info('browser', 'Detached from Google Chrome');
@@ -259,7 +259,9 @@ class BrowserManager extends EventEmitter {
       throw new Error('The Chrome extension is not connected. Install "Post Prep Assistant Bridge" in your Chrome and paste the pairing code (see the dashboard).');
     }
     logger.info('browser', 'Connecting to your Chrome through the extension bridge');
-    const browser = await chromium.connectOverCDP(cdpRelay.cdpUrl());
+    // isLocal: the browser runs on this same computer, so uploads are handed over by file path
+    // (any size) instead of being copied through the connection (Playwright caps that at 50 MB).
+    const browser = await chromium.connectOverCDP(cdpRelay.cdpUrl(), { isLocal: true });
     const context = browser.contexts()[0];
     if (!context) throw new Error('The extension bridge did not provide a browser context.');
     browser.on('disconnected', () => {

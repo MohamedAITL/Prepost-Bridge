@@ -65,7 +65,7 @@ before(async () => {
   }, [cdpRelay.pairingCode, port] as const);
   for (let i = 0; i < 50 && !cdpRelay.status().extensionConnected; i++) await new Promise((r) => setTimeout(r, 100));
   assert.ok(cdpRelay.status().extensionConnected, 'extension should connect with the pairing code');
-  bridged = await chromium.connectOverCDP(cdpRelay.cdpUrl());
+  bridged = await chromium.connectOverCDP(cdpRelay.cdpUrl(), { isLocal: true });
 });
 
 after(async () => {
@@ -137,4 +137,16 @@ test('a frozen background tab is woken up by the extension (Chrome freezes CPU-h
   assert.equal(title, 'X mock');
   assert.ok(Date.now() - started < 12_000, `took ${Date.now() - started} ms`);
   await page.close();
+});
+
+test('uploads a file larger than 50 MB through the extension (handed over by path)', async () => {
+  const big = path.join(dataDir, 'big.mp4');
+  fs.writeFileSync(big, Buffer.alloc(80 * 1024 * 1024, 1));
+  const page = await bridged.contexts()[0].newPage();
+  await page.goto(`${pagesBase}/x`);
+  await page.locator('[data-testid=fileInput]').setInputFiles(big);
+  const size = await page.locator('[data-testid=fileInput]').evaluate((el) => (el as HTMLInputElement).files?.[0]?.size ?? 0);
+  assert.equal(size, 80 * 1024 * 1024);
+  await page.close();
+  fs.rmSync(big);
 });

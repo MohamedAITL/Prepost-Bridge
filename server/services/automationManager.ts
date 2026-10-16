@@ -380,6 +380,9 @@ class AutomationManager extends EventEmitter {
       }
       await this.saveDiagnostics(job);
       if (err instanceof SafetyError) message = `Safety stop: ${err.message}`;
+      if (/setFileInputFiles|Not allowed to read local|file access/i.test(err.message)) {
+        message = 'The browser refused to hand the file to the page. Open the extensions page (chrome://extensions or edge://extensions), open Prepost Bridge → Details, turn on "Allow access to file URLs", then press Retry.';
+      }
       this.update(job, { status: 'failed', failedStep: step ?? null, error: message, message: `Failed${step ? ` at "${step}"` : ''}: ${message}`, awaitingUser: null });
       this.jobLog(job, `Failed${step ? ` at "${step}"` : ''}: ${message}`, 'error');
     } finally {
