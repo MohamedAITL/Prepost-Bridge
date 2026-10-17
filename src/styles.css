@@ -1630,3 +1630,20 @@ progress {
 .card.review {
   padding-bottom: 28px;
 }
+
+/* ---------- action bar blockers ---------- */
+.action-blockers {
+  min-width: 0;
+  font-size: 13px;
+}
+.action-blockers strong {
+  color: var(--danger);
+  font-weight: 600;
+}
+.action-blockers ul {
+  margin: 3px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  display: grid;
+  gap: 1px;
+}

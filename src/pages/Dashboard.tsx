@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BroomIcon, PaperPlaneTiltIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react';
 import { emptyPlatformConfig, type MetaPage, type YouTubeChannel } from '../../shared/types';
-import { batchProblems, enabledDestinations, hasErrors, planBatch, planJobs, validateDraft } from '../../shared/validation';
+import { batchProblems, enabledDestinations, planBatch, planJobs, validateDraft } from '../../shared/validation';
 import { ApiError, IS_HOSTED, api, probeMedia } from '../api';
 import { AutomationStatus } from '../components/AutomationStatus';
 import { AppLogo, BRAND_NAMES } from '../components/Brand';
@@ -197,7 +197,6 @@ export function Dashboard() {
 
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const selected = enabledDestinations(draft);
-  const blocking = selected.filter((d) => hasErrors(validation[d]));
 
   // Across all posts.
   const problems = useMemo(() => batchProblems(posts), [posts]);
@@ -227,13 +226,13 @@ export function Dashboard() {
       <span className={`chip ${browser?.open ? 'is-on' : ''}`}>{browser?.open ? 'Browser ready' : 'Browser closed'}</span>
     );
 
-  const summary = uploading
-    ? 'Waiting for uploads to finish…'
-    : problems.length
-      ? `Fix ${problems.map((x) => x.title).join(', ')} first.`
-      : batchPlans.length === 0
-        ? 'Choose where to post.'
-        : `${activePostCount} ${activePostCount === 1 ? 'post' : 'posts'} · ${batchPlans.length} ${batchPlans.length === 1 ? 'tab' : 'tabs'}`;
+  // The exact reasons the button is disabled, so it's never a mystery.
+  const reasons: string[] = uploading
+    ? ['Waiting for the uploads to finish.']
+    : batchPlans.length === 0 && problems.length === 0
+      ? ['Turn on at least one platform for a post.']
+      : problems.flatMap((x) => x.messages.map((m) => (activePostCount > 1 ? `${x.title}: ${m}` : m)));
+  const summary = canPrepare ? `${activePostCount} ${activePostCount === 1 ? 'post' : 'posts'} · ${batchPlans.length} ${batchPlans.length === 1 ? 'tab' : 'tabs'} ready` : '';
 
   return (
     <div className="app">
@@ -371,7 +370,19 @@ export function Dashboard() {
       )}
 
       <div className="action-bar">
-        <p className={`action-summary${blocking.length ? ' is-error' : ''}`}>{summary}</p>
+        {canPrepare ? (
+          <p className="action-summary">{summary}</p>
+        ) : (
+          <div className="action-blockers">
+            <strong>To prepare, fix:</strong>
+            <ul>
+              {reasons.slice(0, 4).map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+              {reasons.length > 4 && <li>and {reasons.length - 4} more…</li>}
+            </ul>
+          </div>
+        )}
         <button type="button" className="btn primary large" disabled={!canPrepare} onClick={prepare}>
           <PaperPlaneTiltIcon size={18} weight="bold" aria-hidden />
           {activePostCount > 1 ? `Prepare all posts (${activePostCount})` : 'Prepare posts'}
