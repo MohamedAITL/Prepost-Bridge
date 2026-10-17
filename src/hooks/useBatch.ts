@@ -41,11 +41,17 @@ function newId(): string {
 }
 
 /** A fresh post, seeded from saved preferences (selected platforms, YouTube/Meta defaults). */
-function freshDraft(): Draft {
+/**
+ * A fresh post. Platform defaults (Meta Pages, YouTube channel, video type) are seeded so they're
+ * ready when you turn a platform on, but platforms themselves start OFF — otherwise a brand-new,
+ * empty post would instantly block the whole batch with "add text or media". `seedEnabled` turns
+ * the saved platform selection back on, used only to restore the very first post on load.
+ */
+function freshDraft(seedEnabled = false): Draft {
   const base = emptyDraft();
   const prefs = safeGet(() => localStorage, PREFS_KEY) as Prefs | null;
   if (prefs) {
-    for (const [d, on] of Object.entries(prefs.enabled ?? {})) if (d in base.platforms) base.platforms[d as DestinationId].enabled = !!on;
+    if (seedEnabled) for (const [d, on] of Object.entries(prefs.enabled ?? {})) if (d in base.platforms) base.platforms[d as DestinationId].enabled = !!on;
     Object.assign(base.youtube, prefs.youtube ?? {});
     Object.assign(base.meta, prefs.meta ?? {});
   }
@@ -71,7 +77,7 @@ function initialPosts(): BatchPost[] {
   // Migrate a single saved draft from the pre-batch version.
   const old = safeGet(() => sessionStorage, OLD_DRAFT_KEY) as Draft | null;
   if (old && typeof old.sharedText === 'string' && old.platforms) return [{ id: newId(), title: 'Post 1', draft: mergeDraft(old) }];
-  return [{ id: newId(), title: 'Post 1', draft: freshDraft() }];
+  return [{ id: newId(), title: 'Post 1', draft: freshDraft(true) }];
 }
 
 export function useBatch() {
