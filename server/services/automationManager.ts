@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { Page } from 'playwright';
 import { ACTIVE_STATUSES, type JobCheck, type JobSnapshot, type JobStatus } from '../../shared/jobs';
-import { DESTINATION_LABELS, MODULE_LABELS, type Draft, type MetaPage, type ModuleId, type YouTubeChannel } from '../../shared/types';
-import { buildDestinationContent, hasErrors, planJobs, type JobPlan } from '../../shared/validation';
+import { DESTINATION_LABELS, MODULE_LABELS, type BatchPost, type Draft, type MetaPage, type ModuleId, type YouTubeChannel } from '../../shared/types';
+import { batchProblems, buildDestinationContent, hasErrors, planBatch, planJobs, type JobPlan, type PostProblem } from '../../shared/validation';
 import { browserManager } from '../browser/browserManager';
 import { StepError } from '../automation/helpers';
 import { SafetyError } from '../automation/safeActions';
@@ -25,6 +25,11 @@ export const MODULES: Record<ModuleId, PlatformModule> = {
 };
 
 function planLabel(plan: JobPlan, draft?: Draft): string {
+  const prefix = plan.postTitle ? `${plan.postTitle} · ` : '';
+  return prefix + planBody(plan, draft);
+}
+
+function planBody(plan: JobPlan, draft?: Draft): string {
   if (plan.moduleId === 'youtube' && draft) {
     const kind = draft.youtube.postType === 'post' ? 'post' : 'video';
     return draft.youtube.channel ? `YouTube: ${draft.youtube.channel} (${kind})` : `YouTube (${kind})`;
@@ -35,7 +40,7 @@ function planLabel(plan: JobPlan, draft?: Draft): string {
 }
 
 function samePlan(a: JobPlan, b: JobPlan) {
-  return a.moduleId === b.moduleId && a.targets.join() === b.targets.join() && (a.metaPage ?? '') === (b.metaPage ?? '');
+  return a.moduleId === b.moduleId && a.targets.join() === b.targets.join() && (a.metaPage ?? '') === (b.metaPage ?? '') && (a.postId ?? '') === (b.postId ?? '');
 }
 
 class CancelledError extends Error {
@@ -51,6 +56,13 @@ export class ValidationFailure extends Error {
   }
 }
 
+/** Per-post validation failures for a batch. */
+export class BatchFailure extends Error {
+  constructor(public posts: PostProblem[]) {
+    super('Some posts have errors.');
+  }
+}
+
 interface Job {
   snap: JobSnapshot;
   plan: JobPlan;
@@ -59,6 +71,8 @@ interface Job {
   /** Extension mode: the Chrome tab id, kept after the tab is released so it can still be shown. */
   bridgeTabId: number | null;
   released: boolean;
+  /** Scheduler: the job has been taken off the queue and started. */
+  started: boolean;
   /** Set while this job's tab is shown for an upload. */
   foreground: { restore: () => Promise<void>; release: () => void } | null;
   cancelled: boolean;
@@ -72,8 +86,14 @@ interface Job {
  */
 /** Which tab a job runs in: one per platform (one per Meta Page), reused across runs. */
 function tabKey(plan: JobPlan): string {
-  return plan.moduleId === 'meta' ? `meta:${plan.metaPage ?? ''}` : plan.moduleId;
+  const post = plan.postId ?? 'single';
+  return plan.moduleId === 'meta' ? `post:${post}:meta:${plan.metaPage ?? ''}` : `post:${post}:${plan.moduleId}`;
 }
+
+/** How many jobs of each module may run at the same time. YouTube's active channel and TikTok's
+ *  single upload draft are browser-wide, so those run one at a time. */
+const MODULE_LIMITS: Record<ModuleId, number> = { youtube: 1, tiktok: 1, meta: 3, x: 2 };
+const MAX_CONCURRENT = 6;
 
 class AutomationManager extends EventEmitter {
   private jobs = new Map<string, Job>();
@@ -139,36 +159,82 @@ class AutomationManager extends EventEmitter {
     };
   }
 
+  /** Single post (kept for the old API shape). */
   prepare(draft: Draft): JobSnapshot[] {
-    const plans = planJobs(draft);
-    if (plans.length === 0) throw new ValidationFailure([{ destination: 'All', messages: ['Select at least one destination.'] }]);
+    return this.prepareBatch([{ id: 'single', title: '', draft }]);
+  }
 
-    // Validate everything up front so nothing starts with a broken payload.
-    const failures: { destination: string; messages: string[] }[] = [];
+  /** Several independent posts, each prepared on its own platforms. */
+  prepareBatch(posts: BatchPost[]): JobSnapshot[] {
+    const plans = planBatch(posts);
+    if (plans.length === 0) throw new BatchFailure([{ postId: 'all', title: 'All', messages: ['Select at least one destination in a post.'] }]);
+
+    // Per-post validation (content rules, plus the one-YouTube-channel rule).
+    const problems = batchProblems(posts);
+    // Resolving media server-side can also fail (a file was removed); attach that per post.
+    const byId = new Map(posts.map((p) => [p.id, p]));
     for (const plan of plans) {
       try {
-        this.buildContent(plan, draft);
+        this.buildContent(plan, byId.get(plan.postId!)!.draft);
       } catch (e) {
-        if (e instanceof ValidationFailure) failures.push(...e.details);
-        else failures.push({ destination: planLabel(plan), messages: [(e as Error).message] });
+        const msg = e instanceof ValidationFailure ? e.details.flatMap((d) => d.messages).join(' ') : (e as Error).message;
+        const found = problems.find((x) => x.postId === plan.postId);
+        if (found) found.messages.push(msg);
+        else problems.push({ postId: plan.postId!, title: plan.postTitle ?? '', messages: [msg] });
       }
     }
-    if (failures.length) throw new ValidationFailure(failures);
+    if (problems.length) throw new BatchFailure(problems);
 
-    for (const plan of plans) {
-      const busy = [...this.jobs.values()].find((j) => j.plan.moduleId === plan.moduleId && ACTIVE_STATUSES.includes(j.snap.status) && samePlan(j.plan, plan));
-      if (busy) throw new ValidationFailure([{ destination: busy.snap.label, messages: ['Already being prepared. Wait for it to finish or cancel it first.'] }]);
-    }
+    const busy = [...this.jobs.values()].find((j) => plans.some((p) => samePlan(j.plan, p)) && ACTIVE_STATUSES.includes(j.snap.status));
+    if (busy) throw new BatchFailure([{ postId: busy.snap.postId, title: busy.snap.postTitle, messages: [`"${busy.snap.label}" is still being prepared. Wait for it or cancel it first.`] }]);
 
-    // Replace finished jobs for the same destinations (their tabs stay open in the browser).
+    // Replace finished jobs for the same post × destination (their tabs stay open and are reused).
     for (const [id, job] of this.jobs) {
       if (plans.some((p) => samePlan(p, job.plan))) this.jobs.delete(id);
     }
 
-    const created = plans.map((plan) => this.createJob(plan, draft));
+    const created = plans.map((plan) => this.createJob(plan, byId.get(plan.postId!)!.draft));
     this.emitChange();
-    for (const job of created) void this.run(job);
+    this.pump();
     return created.map((j) => j.snap);
+  }
+
+  // ---- concurrency scheduler ----
+
+  /** Jobs waiting for a turn, in submission order. */
+  private queue: Job[] = [];
+
+  private runningByModule(moduleId: ModuleId): number {
+    return [...this.jobs.values()].filter((j) => j.started && j.plan.moduleId === moduleId && ACTIVE_STATUSES.includes(j.snap.status)).length;
+  }
+
+  private totalRunning(): number {
+    return [...this.jobs.values()].filter((j) => j.started && ACTIVE_STATUSES.includes(j.snap.status)).length;
+  }
+
+  /** Start as many queued jobs as the limits allow. */
+  private pump() {
+    for (const job of this.jobs.values()) if (!job.started && !this.queue.includes(job)) this.queue.push(job);
+    let progressed = true;
+    while (progressed) {
+      progressed = false;
+      for (let i = 0; i < this.queue.length; i++) {
+        const job = this.queue[i];
+        if (job.cancelled) {
+          this.queue.splice(i, 1);
+          this.update(job, { status: 'cancelled', message: 'Cancelled. Nothing was published.' });
+          progressed = true;
+          break;
+        }
+        if (this.totalRunning() >= MAX_CONCURRENT) return;
+        if (this.runningByModule(job.plan.moduleId) >= MODULE_LIMITS[job.plan.moduleId]) continue;
+        this.queue.splice(i, 1);
+        job.started = true;
+        void this.run(job).finally(() => this.pump());
+        progressed = true;
+        break;
+      }
+    }
   }
 
   private createJob(plan: JobPlan, draft: Draft): Job {
@@ -180,6 +246,7 @@ class AutomationManager extends EventEmitter {
       page: null,
       bridgeTabId: null,
       released: false,
+      started: false,
       foreground: null,
       cancelled: false,
       resume: null,
@@ -188,10 +255,12 @@ class AutomationManager extends EventEmitter {
         id: crypto.randomUUID(),
         moduleId: plan.moduleId,
         targets: plan.targets,
+        postId: plan.postId ?? 'single',
+        postTitle: plan.postTitle ?? '',
         label,
         status: 'waiting',
         progress: 0,
-        message: 'Waiting to start',
+        message: 'Waiting for its turn…',
         currentStep: null,
         failedStep: null,
         error: null,
@@ -413,7 +482,7 @@ class AutomationManager extends EventEmitter {
     // The retry runs in the same platform tab (it's reused, not closed).
     const job = this.createJob(old.plan, old.draft);
     this.emitChange();
-    void this.run(job);
+    this.pump();
     return job.snap;
   }
 
@@ -428,6 +497,8 @@ class AutomationManager extends EventEmitter {
     const job = this.jobs.get(id);
     if (!job) throw new Error('Unknown job.');
     job.cancelled = true;
+    const qi = this.queue.indexOf(job);
+    if (qi >= 0) this.queue.splice(qi, 1);
     job.abortWait?.(new CancelledError());
     if (!ACTIVE_STATUSES.includes(job.snap.status) && !job.snap.awaitingUser) return;
     this.update(job, { message: 'Cancelling…' });

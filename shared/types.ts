@@ -120,6 +120,13 @@ export interface Draft {
   meta: MetaOptions;
 }
 
+/** One post in a batch: its own text, media, cover and platform choices. */
+export interface BatchPost {
+  id: string;
+  title: string;
+  draft: Draft;
+}
+
 export function emptyPlatformConfig(enabled = false): PlatformConfig {
   return { enabled, useSharedText: true, customText: '', includeLink: true, mediaIds: null };
 }

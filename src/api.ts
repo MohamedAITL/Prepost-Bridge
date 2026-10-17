@@ -1,4 +1,5 @@
 import type { Draft, MediaItem } from './types/content';
+import type { BatchPost } from '../shared/types';
 import type { MetaPage, YouTubeChannel } from '../shared/types';
 import type { BrowserMode, BrowserState, JobSnapshot, ModuleId } from './types/platform';
 
@@ -10,10 +11,18 @@ export const ENGINE_URL = ((import.meta.env.VITE_ENGINE_URL as string | undefine
 export const IS_HOSTED = ENGINE_URL !== '';
 const u = (path: string) => `${ENGINE_URL}${path}`;
 
+export interface PostProblem {
+  postId: string;
+  title: string;
+  messages: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
     public details?: unknown,
+    /** Set for a batch failure: which posts have errors. */
+    public posts?: PostProblem[],
   ) {
     super(message);
   }
@@ -26,7 +35,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(data.error ?? `Request failed (${res.status})`, data.details);
+  if (!res.ok) throw new ApiError(data.error ?? `Request failed (${res.status})`, data.details, data.posts);
   return data as T;
 }
 
@@ -39,7 +48,7 @@ export const api = {
   eventsUrl: () => u('/api/events'),
   health: () => request<{ ok: boolean }>('GET', '/api/health'),
 
-  prepare: (draft: Draft) => request<{ jobs: JobSnapshot[] }>('POST', '/api/prepare', { draft }),
+  prepareBatch: (posts: BatchPost[]) => request<{ jobs: JobSnapshot[] }>('POST', '/api/prepare', { posts }),
   retry: (id: string) => request<JobSnapshot>('POST', `/api/jobs/${id}/retry`),
   continueJob: (id: string) => request('POST', `/api/jobs/${id}/continue`),
   cancel: (id: string) => request('POST', `/api/jobs/${id}/cancel`),

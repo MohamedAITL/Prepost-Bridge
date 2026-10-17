@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BroomIcon, ListChecksIcon, PaperPlaneTiltIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react';
 import { emptyPlatformConfig, type MetaPage, type YouTubeChannel } from '../../shared/types';
-import { enabledDestinations, hasErrors, planJobs, validateDraft } from '../../shared/validation';
+import { batchProblems, enabledDestinations, hasErrors, planBatch, planJobs, validateDraft } from '../../shared/validation';
 import { ApiError, IS_HOSTED, api, probeMedia } from '../api';
 import { AutomationStatus } from '../components/AutomationStatus';
 import { AppLogo, BRAND_NAMES } from '../components/Brand';
@@ -15,10 +15,14 @@ import { PlatformTabs } from '../components/PlatformTabs';
 import { PlatformSelector } from '../components/PlatformSelector';
 import { SettingsMenu } from '../components/SettingsMenu';
 import { YouTubeChannelPicker } from '../components/YouTubeChannelPicker';
-import { useDraft } from '../hooks/useDraft';
+import { PostStrip } from '../components/PostStrip';
+import { useBatch } from '../hooks/useBatch';
 import { ACTIVE_STATUSES, type BrowserState, type JobSnapshot } from '../types/platform';
 
 function errorText(e: unknown): string {
+  if (e instanceof ApiError && e.posts?.length) {
+    return `${e.message} ${e.posts.map((x) => `${x.title}: ${x.messages.join(' ')}`).join(' · ')}`;
+  }
   if (e instanceof ApiError && Array.isArray(e.details)) {
     const lines = (e.details as ({ destination: string; messages: string[] } | string)[]).map((d) => (typeof d === 'string' ? d : `${d.destination}: ${d.messages.join(' ')}`));
     return `${e.message} ${lines.join(' · ')}`;
@@ -29,7 +33,7 @@ function errorText(e: unknown): string {
 type EngineState = 'checking' | 'up' | 'down';
 
 export function Dashboard() {
-  const { draft, update, updatePlatform } = useDraft();
+  const { posts, activeId, draft, update, updatePlatform, updateAll, addPost, duplicatePost, removePost, renamePost, select } = useBatch();
   const [pending, setPending] = useState<PendingUpload[]>([]);
   const [jobs, setJobs] = useState<JobSnapshot[]>([]);
   const [browser, setBrowser] = useState<BrowserState | null>(null);
@@ -67,13 +71,16 @@ export function Dashboard() {
         setEngine('up');
         // The engine may have restarted (it clears uploads): drop references to files it no longer has.
         api.listMedia().then((media) =>
-          update((d) => {
+          updateAll((d) => {
             const ids = new Set(media.map((m) => m.id));
+            // Each post keeps only the media it already referenced that still exists.
+            const mine = d.media.filter((m) => ids.has(m.id));
+            const mineIds = new Set(mine.map((m) => m.id));
             return {
               ...d,
-              media,
-              coverId: d.coverId && ids.has(d.coverId) ? d.coverId : null,
-              platforms: Object.fromEntries(Object.entries(d.platforms).map(([k, v]) => [k, v.mediaIds ? { ...v, mediaIds: v.mediaIds.filter((x) => ids.has(x)) } : v])) as typeof d.platforms,
+              media: mine,
+              coverId: d.coverId && mineIds.has(d.coverId) ? d.coverId : null,
+              platforms: Object.fromEntries(Object.entries(d.platforms).map(([k, v]) => [k, v.mediaIds ? { ...v, mediaIds: v.mediaIds.filter((x) => mineIds.has(x)) } : v])) as typeof d.platforms,
             };
           }),
         );
@@ -84,7 +91,7 @@ export function Dashboard() {
     return () => {
       alive = false;
     };
-  }, [update, applyMetaPages, applyYtChannels]);
+  }, [updateAll, applyMetaPages, applyYtChannels]);
 
   useEffect(() => {
     if (engine !== 'up') return;
@@ -175,15 +182,21 @@ export function Dashboard() {
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const selected = enabledDestinations(draft);
   const blocking = selected.filter((d) => hasErrors(validation[d]));
-  const plans = useMemo(() => planJobs(draft), [draft]);
+
+  // Across all posts.
+  const problems = useMemo(() => batchProblems(posts), [posts]);
+  const problemIds = useMemo(() => Object.fromEntries(problems.map((x) => [x.postId, true])), [problems]);
+  const batchPlans = useMemo(() => planBatch(posts), [posts]);
+  const activePostCount = useMemo(() => posts.filter((pp) => enabledDestinations(pp.draft).length > 0).length, [posts]);
+
   const anyActive = jobs.some((j) => ACTIVE_STATUSES.includes(j.status));
   const uploading = pending.some((p) => !p.error);
-  const canPrepare = selected.length > 0 && blocking.length === 0 && !uploading && engine === 'up';
+  const canPrepare = batchPlans.length > 0 && problems.length === 0 && !uploading && engine === 'up';
 
   const prepare = () =>
     run(async () => {
       setNotice(null);
-      await api.prepare(draft);
+      await api.prepareBatch(posts.map(({ id, title, draft: d }) => ({ id, title, draft: d })));
       document.getElementById('progress')?.scrollIntoView({ behavior: 'smooth' });
     });
 
@@ -198,14 +211,13 @@ export function Dashboard() {
       <span className={`chip ${browser?.open ? 'is-on' : ''}`}>{browser?.open ? 'Browser ready' : 'Browser closed'}</span>
     );
 
-  const summary =
-    selected.length === 0
-      ? 'Choose where to post.'
-      : blocking.length
-        ? `Fix ${blocking.map((d) => BRAND_NAMES[d]).join(', ')} first.`
-        : uploading
-          ? 'Waiting for uploads to finish…'
-          : `${plans.length} ${plans.length === 1 ? 'tab' : 'tabs'}: ${plans.map((p) => p.metaPage ?? BRAND_NAMES[p.targets[0]]).join(', ')}`;
+  const summary = uploading
+    ? 'Waiting for uploads to finish…'
+    : problems.length
+      ? `Fix ${problems.map((x) => x.title).join(', ')} first.`
+      : batchPlans.length === 0
+        ? 'Choose where to post.'
+        : `${activePostCount} ${activePostCount === 1 ? 'post' : 'posts'} · ${batchPlans.length} ${batchPlans.length === 1 ? 'tab' : 'tabs'}`;
 
   return (
     <div className="app">
@@ -222,7 +234,7 @@ export function Dashboard() {
           <SettingsMenu browser={browser} busy={anyActive} run={run} />
           {confirmClear ? (
             <div className="confirm-inline" role="group" aria-label="Confirm clearing">
-              <span>Clear text and media?</span>
+              <span>Clear this post?</span>
               <button type="button" className="btn small danger" onClick={clearContent}>
                 Clear
               </button>
@@ -253,6 +265,17 @@ export function Dashboard() {
           </button>
         </div>
       )}
+
+      <PostStrip
+        posts={posts}
+        activeId={activeId}
+        errors={problemIds}
+        onSelect={select}
+        onAdd={addPost}
+        onDuplicate={duplicatePost}
+        onRemove={removePost}
+        onRename={renamePost}
+      />
 
       <main className="workspace">
         <section className="card compose" id="compose" aria-labelledby="compose-title">
@@ -323,7 +346,7 @@ export function Dashboard() {
         <p className={`action-summary${blocking.length ? ' is-error' : ''}`}>{summary}</p>
         <button type="button" className="btn primary large" disabled={!canPrepare} onClick={prepare}>
           <PaperPlaneTiltIcon size={18} weight="bold" aria-hidden />
-          Prepare posts
+          {activePostCount > 1 ? `Prepare all posts (${activePostCount})` : 'Prepare posts'}
         </button>
       </div>
 

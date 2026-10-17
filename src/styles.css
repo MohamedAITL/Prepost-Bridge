@@ -1472,3 +1472,116 @@ progress {
   border: 0;
   display: block;
 }
+
+/* ---------- post strip (batch) ---------- */
+.post-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.post-tab {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.post-tab.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.post-tab.single {
+  padding: 8px 14px;
+  font-weight: 560;
+  align-items: center;
+}
+.post-tab-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  padding: 7px 4px 7px 12px;
+  cursor: pointer;
+  min-width: 0;
+}
+.post-tab-main .post-title {
+  font-weight: 560;
+}
+.post-tab-main small {
+  color: var(--muted);
+}
+.post-tab-main .dot {
+  position: absolute;
+  margin-left: -8px;
+  margin-top: 6px;
+}
+.post-menu-btn {
+  min-width: 28px;
+  border-radius: 0;
+  color: var(--muted);
+}
+.post-menu {
+  min-width: 150px;
+  padding: 6px;
+}
+.post-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.post-menu button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.post-menu button.danger {
+  color: var(--danger);
+}
+.post-menu button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.post-rename {
+  border: 0;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 560;
+  padding: 7px 12px;
+  width: 9ch;
+  min-width: 90px;
+}
+.post-rename:focus {
+  outline: none;
+}
+.post-add {
+  align-self: center;
+}
+
+/* ---------- progress grouped by post ---------- */
+.job-groups {
+  display: grid;
+  gap: 16px;
+}
+.job-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}

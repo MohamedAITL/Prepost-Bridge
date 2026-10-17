@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { emptyDraft, type Draft, type MediaItem } from '../shared/types';
-import { appendLink, buildDestinationContent, graphemeLength, planJobs, xWeightedLength } from '../shared/validation';
+import { appendLink, batchProblems, buildDestinationContent, graphemeLength, planBatch, planJobs, xWeightedLength } from '../shared/validation';
 
 const img = (id: string, extra: Partial<MediaItem> = {}): MediaItem => ({ id, name: `${id}.jpg`, mime: 'image/jpeg', size: 100_000, kind: 'image', source: 'upload', ...extra });
 const vid = (id: string, extra: Partial<MediaItem> = {}): MediaItem => ({ id, name: `${id}.mp4`, mime: 'video/mp4', size: 5_000_000, kind: 'video', source: 'upload', durationSec: 30, ...extra });
@@ -146,4 +146,67 @@ test('a cover whose image is gone is ignored, not an error', () => {
   });
   assert.deepEqual(errors(d, 'tiktok'), []);
   assert.equal(buildDestinationContent(d, 'tiktok').thumbnail ?? null, null);
+});
+
+test('planBatch: one job per post × platform, tagged with the post', () => {
+  const p1 = draftWith((x) => {
+    x.sharedText = 'Post one';
+    x.platforms.x.enabled = true;
+    x.platforms.tiktok.enabled = true;
+    x.media = [vid('v1')];
+  });
+  const p2 = draftWith((x) => {
+    x.sharedText = 'Post two';
+    x.platforms.x.enabled = true;
+    x.media = [img('a')];
+  });
+  const plans = planBatch([
+    { id: 'A', title: 'Post 1', draft: p1 },
+    { id: 'B', title: 'Post 2', draft: p2 },
+  ]);
+  assert.deepEqual(
+    plans.map((pl) => `${pl.postId}:${pl.moduleId}`),
+    ['A:x', 'A:tiktok', 'B:x'],
+  );
+  assert.equal(plans[0].postTitle, 'Post 1');
+});
+
+test('batchProblems: different YouTube channels in one batch is an error', () => {
+  const mk = (channel: string) =>
+    draftWith((x) => {
+      x.platforms.youtube.enabled = true;
+      x.youtube.postType = 'post';
+      x.sharedText = 'hi';
+      x.youtube.channel = channel;
+    });
+  const problems = batchProblems([
+    { id: 'A', title: 'Post 1', draft: mk('ChoufSport') },
+    { id: 'B', title: 'Post 2', draft: mk('ChoufTV Live') },
+  ]);
+  assert.equal(problems.length, 2);
+  assert.ok(problems[0].messages.some((m) => /one channel at a time/.test(m)));
+  // Same channel: no error.
+  assert.deepEqual(
+    batchProblems([
+      { id: 'A', title: 'Post 1', draft: mk('ChoufSport') },
+      { id: 'B', title: 'Post 2', draft: mk('ChoufSport') },
+    ]),
+    [],
+  );
+});
+
+test('planBatch: posts with no platform selected are skipped', () => {
+  const empty = draftWith((x) => (x.sharedText = 'nothing selected'));
+  const one = draftWith((x) => {
+    x.sharedText = 'x';
+    x.platforms.x.enabled = true;
+  });
+  assert.equal(planBatch([{ id: 'A', title: 'Post 1', draft: empty }]).length, 0);
+  assert.equal(
+    planBatch([
+      { id: 'A', title: 'Post 1', draft: empty },
+      { id: 'B', title: 'Post 2', draft: one },
+    ]).length,
+    1,
+  );
 });

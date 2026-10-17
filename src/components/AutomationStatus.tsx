@@ -139,11 +139,35 @@ export function AutomationStatus(props: Props) {
       </div>
     );
   }
+  // Group by post when the batch has titled posts (several posts prepared together).
+  const grouped = props.jobs.some((j) => j.postTitle);
+  if (!grouped) {
+    return (
+      <ul className="job-list">
+        {props.jobs.map((job) => (
+          <JobRow key={job.id} job={job} {...props} />
+        ))}
+      </ul>
+    );
+  }
+  const byPost = new Map<string, { title: string; jobs: typeof props.jobs }>();
+  for (const job of props.jobs) {
+    const g = byPost.get(job.postId) ?? { title: job.postTitle || 'Post', jobs: [] };
+    g.jobs.push(job);
+    byPost.set(job.postId, g);
+  }
   return (
-    <ul className="job-list">
-      {props.jobs.map((job) => (
-        <JobRow key={job.id} job={job} {...props} />
+    <div className="job-groups">
+      {[...byPost.values()].map((g) => (
+        <div key={g.title} className="job-group">
+          <h3 className="job-group-title">{g.title}</h3>
+          <ul className="job-list">
+            {g.jobs.map((job) => (
+              <JobRow key={job.id} job={job} {...props} />
+            ))}
+          </ul>
+        </div>
       ))}
-    </ul>
+    </div>
   );
 }

@@ -8,8 +8,8 @@ import { ACTIVE_STATUSES } from '../shared/jobs';
 import { browserManager } from './browser/browserManager';
 import { cdpRelay } from './bridge/cdpRelay';
 import { config } from './config';
-import { automationManager, ValidationFailure } from './services/automationManager';
-import { parseDraft, parseMetaPages, parseYouTubeChannels } from './services/contentValidator';
+import { automationManager, BatchFailure, ValidationFailure } from './services/automationManager';
+import { parseBatch, parseDraft, parseMetaPages, parseYouTubeChannels } from './services/contentValidator';
 import { readSettings, writeSettings } from './utils/settings';
 import { MediaError, mediaStore } from './services/mediaStore';
 import { logger } from './utils/logger';
@@ -122,8 +122,12 @@ app.delete(
 
 // ---------- automation ----------
 app.post('/api/prepare', (req, res) => {
-  const draft = parseDraft(req.body?.draft);
-  res.json({ jobs: automationManager.prepare(draft) });
+  // New shape: { posts: [{ id, title, draft }] }. Old shape: { draft } (a single post).
+  if (req.body?.posts) {
+    res.json({ jobs: automationManager.prepareBatch(parseBatch(req.body.posts)) });
+  } else {
+    res.json({ jobs: automationManager.prepare(parseDraft(req.body?.draft)) });
+  }
 });
 
 app.get('/api/jobs', (_req, res) => res.json(automationManager.list()));
@@ -272,6 +276,7 @@ if (config.production && fs.existsSync(distDir)) {
 
 // ---------- errors ----------
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (err instanceof BatchFailure) return res.status(422).json({ error: err.message, posts: err.posts });
   if (err instanceof ValidationFailure) return res.status(422).json({ error: err.message, details: err.details });
   if (err instanceof ZodError) return res.status(400).json({ error: 'Invalid request.', details: err.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
   if (err instanceof MediaError) return res.status(400).json({ error: err.message });

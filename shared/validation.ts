@@ -1,5 +1,6 @@
 import { COVER_RULES, PLATFORM_RULES, YOUTUBE_POST_RULES, YOUTUBE_TITLE_LIMIT, type MediaRule, type PlatformRules } from './rules';
 import {
+  type BatchPost,
   DESTINATIONS,
   DESTINATION_LABELS,
   type DestinationId,
@@ -29,6 +30,9 @@ export interface JobPlan {
   targets: DestinationId[];
   /** Meta only: the Facebook Page this job posts as. */
   metaPage?: string;
+  /** Batch: which post this job belongs to. */
+  postId?: string;
+  postTitle?: string;
 }
 
 // ---------- text helpers ----------
@@ -288,4 +292,47 @@ export function planJobs(draft: Draft): JobPlan[] {
   }
   for (const d of ['x', 'youtube', 'tiktok'] as const) if (enabled.includes(d)) plans.push({ moduleId: d, targets: [d] });
   return plans;
+}
+
+// ---------- batches (several independent posts prepared at once) ----------
+
+export interface PostProblem {
+  postId: string;
+  title: string;
+  messages: string[];
+}
+
+/** Posts that will actually be prepared: the ones with at least one platform switched on. */
+export function activePosts(posts: BatchPost[]): BatchPost[] {
+  return posts.filter((p) => enabledDestinations(p.draft).length > 0);
+}
+
+/**
+ * Blocking problems per post, plus batch-wide rules. YouTube's active channel applies to the whole
+ * browser, so all posts in one batch must use the same YouTube channel.
+ */
+export function batchProblems(posts: BatchPost[]): PostProblem[] {
+  const problems: PostProblem[] = [];
+  const active = activePosts(posts);
+  for (const p of active) {
+    const v = validateDraft(p.draft);
+    const messages = Object.values(v).flatMap((c) => c.issues.filter((i) => i.level === 'error').map((i) => `${DESTINATION_LABELS[c.destination]}: ${i.message}`));
+    if (messages.length) problems.push({ postId: p.id, title: p.title, messages });
+  }
+  const yt = active.filter((p) => p.draft.platforms.youtube.enabled);
+  const channels = new Set(yt.map((p) => p.draft.youtube.channel));
+  if (channels.size > 1) {
+    for (const p of yt) {
+      const msg = 'YouTube can only be prepared for one channel at a time. Use the same channel in every post, or prepare these posts separately.';
+      const existing = problems.find((x) => x.postId === p.id);
+      if (existing) existing.messages.push(msg);
+      else problems.push({ postId: p.id, title: p.title, messages: [msg] });
+    }
+  }
+  return problems;
+}
+
+/** One job per post × platform (Meta: per Page). */
+export function planBatch(posts: BatchPost[]): JobPlan[] {
+  return activePosts(posts).flatMap((p) => planJobs(p.draft).map((plan) => ({ ...plan, postId: p.id, postTitle: p.title })));
 }

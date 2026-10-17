@@ -64,3 +64,8 @@ export function parseYouTubeChannels(input: unknown) {
   const seen = new Set<string>();
   return list.filter((c) => !seen.has(c.name.toLowerCase()) && seen.add(c.name.toLowerCase()));
 }
+
+export function parseBatch(input: unknown): import('../../shared/types').BatchPost[] {
+  const schema = z.array(z.object({ id: z.string().min(1).max(64), title: z.string().max(80), draft: z.unknown() })).min(1).max(30);
+  return schema.parse(input).map((p) => ({ id: p.id, title: p.title, draft: parseDraft(p.draft) }));
+}

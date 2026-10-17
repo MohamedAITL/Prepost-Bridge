@@ -46,6 +46,9 @@ export interface JobSnapshot {
   id: string;
   moduleId: ModuleId;
   targets: DestinationId[];
+  /** Batch: which post this job belongs to (for grouping in the UI). */
+  postId: string;
+  postTitle: string;
   label: string;
   status: JobStatus;
   progress: number;
