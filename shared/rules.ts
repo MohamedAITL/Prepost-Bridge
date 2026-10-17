@@ -11,6 +11,8 @@ export interface MediaRule {
   maxDurationSec?: number;
   /** When true, exceeding maxDurationSec is a warning (some accounts have higher limits). */
   durationIsSoft?: boolean;
+  /** When true, exceeding maxBytes is a warning (e.g. X Premium / Instagram allow larger files). */
+  sizeIsSoft?: boolean;
 }
 
 export interface PlatformRules {
@@ -52,7 +54,7 @@ export const PLATFORM_RULES: Record<DestinationId, PlatformRules> = {
     textLimitIsHard: true,
     requiresMedia: true,
     image: { mimes: JPEG_PNG, maxBytes: 8 * MB, maxCount: 10 },
-    video: { mimes: MP4_MOV, maxBytes: 1 * GB, maxCount: 10, maxDurationSec: 15 * 60, durationIsSoft: true },
+    video: { mimes: MP4_MOV, maxBytes: 1 * GB, maxCount: 10, maxDurationSec: 15 * 60, durationIsSoft: true, sizeIsSoft: true },
     allowMixedImageAndVideo: true,
     maxHashtags: 30,
     notes: ['Instagram needs at least one photo or video.', 'Carousels hold up to 10 items.'],
@@ -63,7 +65,7 @@ export const PLATFORM_RULES: Record<DestinationId, PlatformRules> = {
     textLimitIsHard: false,
     requiresMedia: false,
     image: { mimes: COMMON_IMAGES, maxBytes: 5 * MB, maxCount: 4 },
-    video: { mimes: MP4_MOV, maxBytes: 512 * MB, maxCount: 1, maxDurationSec: 140, durationIsSoft: true },
+    video: { mimes: MP4_MOV, maxBytes: 512 * MB, maxCount: 1, maxDurationSec: 140, durationIsSoft: true, sizeIsSoft: true },
     allowMixedImageAndVideo: false,
     notes: ['Up to 4 images or 1 video.', 'Text over 280 characters requires X Premium.'],
   },

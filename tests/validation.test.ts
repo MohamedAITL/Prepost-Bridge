@@ -122,6 +122,24 @@ test('oversized and wrong-type files are reported', () => {
   assert.ok(errs.some((m) => /does not accept image\/gif/.test(m)));
 });
 
+test('a large video is a warning on X/Instagram (soft), still an error on Facebook (hard)', () => {
+  const big = { size: 1.2 * 1024 ** 3 };
+  // X: over 512 MB → warning, not a blocking error.
+  const x = draftWith((d) => {
+    d.media = [vid('clip', big)];
+    d.platforms.x.enabled = true;
+  });
+  assert.deepEqual(errors(x, 'x'), []);
+  assert.ok(buildDestinationContent(x, 'x').issues.some((i) => i.level === 'warning' && /allows up to/.test(i.message)));
+  // Facebook: 4 GB hard limit, 5 GB → error.
+  const fb = draftWith((d) => {
+    d.media = [vid('clip', { size: 5 * 1024 ** 3 })];
+    d.platforms.facebook.enabled = true;
+    d.meta.pages = [{ name: 'Page', instagram: false }];
+  });
+  assert.ok(errors(fb, 'facebook').some((m) => /allows up to/.test(m)));
+});
+
 test('YouTube post mode: text-only or up to 10 images; videos and >10 images are refused', () => {
   const d = draftWith((x) => {
     x.sharedText = 'Community update';

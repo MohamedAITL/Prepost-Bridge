@@ -139,7 +139,8 @@ function checkMediaAgainstRule(items: MediaItem[], rule: MediaRule | null, kindL
       issues.push({ level: 'error', message: `${label} does not accept ${m.mime} files (${m.name}).` });
     }
     if (m.size > rule.maxBytes) {
-      issues.push({ level: 'error', message: `${m.name} is ${formatBytes(m.size)}; ${label} allows up to ${formatBytes(rule.maxBytes)}.` });
+      const msg = `${m.name} is ${formatBytes(m.size)}; ${label} allows up to ${formatBytes(rule.maxBytes)}${rule.sizeIsSoft ? ' for standard accounts; larger files may be refused' : ''}.`;
+      issues.push({ level: rule.sizeIsSoft ? 'warning' : 'error', message: msg });
     }
     if (rule.maxDurationSec && m.durationSec && m.durationSec > rule.maxDurationSec) {
       const msg = `${m.name} is ${Math.round(m.durationSec)} s long; ${label} allows ${rule.maxDurationSec} s${rule.durationIsSoft ? ' for standard accounts' : ''}.`;
