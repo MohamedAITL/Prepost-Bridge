@@ -1594,3 +1594,39 @@ progress {
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
 }
+
+/* ---------- numbered step headers ---------- */
+.step-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.step-num {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 650;
+  margin-top: 1px;
+}
+.step-head .card-title {
+  margin: 0;
+}
+.step-sub {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 1px;
+}
+.card-head .step-head {
+  margin-bottom: 0;
+}
+/* Reserve space so the sticky action bar never hides the review card's content. */
+.card.review {
+  padding-bottom: 28px;
+}

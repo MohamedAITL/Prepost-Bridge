@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BroomIcon, ListChecksIcon, PaperPlaneTiltIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react';
+import { BroomIcon, PaperPlaneTiltIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react';
 import { emptyPlatformConfig, type MetaPage, type YouTubeChannel } from '../../shared/types';
 import { batchProblems, enabledDestinations, hasErrors, planBatch, planJobs, validateDraft } from '../../shared/validation';
 import { ApiError, IS_HOSTED, api, probeMedia } from '../api';
@@ -295,9 +295,13 @@ export function Dashboard() {
 
       <main className="workspace">
         <section className="card compose" id="compose" aria-labelledby="compose-title">
-          <h2 id="compose-title" className="card-title">
-            Your post
-          </h2>
+          <header className="step-head">
+            <span className="step-num">1</span>
+            <div>
+              <h2 id="compose-title" className="card-title">Write your post</h2>
+              <p className="step-sub">Text, an optional link, and photos or videos.</p>
+            </div>
+          </header>
           <ContentEditor value={draft.sharedText} onChange={(sharedText) => update((d) => ({ ...d, sharedText }))} showXCount={draft.platforms.x.enabled} />
           <LinkInput link={draft.link} onChange={(link) => update((d) => ({ ...d, link }))} onImportAsMedia={importMedia} />
           <MediaUploader
@@ -314,9 +318,13 @@ export function Dashboard() {
         </section>
 
         <aside className="card destinations" aria-labelledby="dest-title">
-          <h2 id="dest-title" className="card-title">
-            Post to
-          </h2>
+          <header className="step-head">
+            <span className="step-num">2</span>
+            <div>
+              <h2 id="dest-title" className="card-title">Choose where to post</h2>
+              <p className="step-sub">Turn on each platform for this post.</p>
+            </div>
+          </header>
           <PlatformSelector
             platforms={draft.platforms}
             onToggle={(d, enabled) =>
@@ -351,9 +359,13 @@ export function Dashboard() {
 
       {selected.length > 0 && (
         <section className="card review" aria-labelledby="review-title">
-          <h2 id="review-title" className="card-title">
-            Check each platform
-          </h2>
+          <header className="step-head">
+            <span className="step-num">3</span>
+            <div>
+              <h2 id="review-title" className="card-title">Review each platform</h2>
+              <p className="step-sub">What will be filled in, with any warnings.</p>
+            </div>
+          </header>
           <PlatformTabs destinations={selected} draft={draft} validation={validation} onPlatformChange={updatePlatform} onDraftChange={update} />
         </section>
       )}
@@ -368,9 +380,13 @@ export function Dashboard() {
 
       <section className="card progress" id="progress" aria-labelledby="progress-title">
         <div className="card-head">
-          <h2 id="progress-title" className="card-title">
-            <ListChecksIcon size={20} aria-hidden /> Progress
-          </h2>
+          <header className="step-head">
+            <span className="step-num">4</span>
+            <div>
+              <h2 id="progress-title" className="card-title">Prepare &amp; review in your browser</h2>
+              <p className="step-sub">Each post opens in its own tab, ready for you to publish.</p>
+            </div>
+          </header>
           {jobs.some((j) => !ACTIVE_STATUSES.includes(j.status)) && (
             <button type="button" className="btn small ghost" onClick={() => run(api.clearFinished)}>
               Clear finished
