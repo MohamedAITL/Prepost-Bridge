@@ -1475,6 +1475,7 @@ progress {
 
 /* ---------- post strip (batch) ---------- */
 .post-strip {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: 6px;
@@ -1482,12 +1483,18 @@ progress {
   margin-bottom: 14px;
 }
 .post-tab {
+  position: relative;
   display: flex;
   align-items: stretch;
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--surface);
   overflow: hidden;
+}
+/* The post whose menu is open sits above its siblings so the menu is clickable. */
+.post-tab.has-menu {
+  z-index: var(--z-popover);
+  overflow: visible;
 }
 .post-tab.is-active {
   border-color: var(--accent);
@@ -1528,8 +1535,10 @@ progress {
   color: var(--muted);
 }
 .post-menu {
-  min-width: 150px;
+  min-width: 160px;
   padding: 6px;
+  right: auto;
+  left: 0;
 }
 .post-menu button {
   display: flex;

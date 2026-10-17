@@ -1,5 +1,5 @@
 import type { Locator, Page } from 'playwright';
-import { fieldContains, fillTextField, findAttached, findVisible, pollUntil, requireAttached, requireVisible, setFiles, openUrl } from '../automation/helpers';
+import { fieldContains, fillTextField, findAttached, findVisible, pollUntil, requireAttached, requireVisible, setFiles, openUrl, readFieldText, normalizeForCompare } from '../automation/helpers';
 import { observeOnly, safeClick } from '../automation/safeActions';
 import { detectSessionWith, openWithSession } from '../automation/session';
 import { YT } from './selectors/youtube';
@@ -249,11 +249,21 @@ export const youtubeStudioModule: PlatformModule = {
     if (err) throw new Error(`YouTube reported: ${err}`);
 
     ctx.setStatus('filling', 'Filling title and description…', 40);
-    await ctx.step('Fill title', () => fillTextField(page, title, content.title ?? ''));
+    // Locate the description up front and make sure it's a DIFFERENT element from the title, so the
+    // description (the main text) can never overwrite the dedicated title field.
+    let desc: Awaited<ReturnType<typeof findVisible>> = null;
     if (content.text) {
-      const desc = await ctx.step('Locate description field', () => requireVisible(page, YT.description, 15_000, 'description field'));
-      await ctx.step('Fill description', () => fillTextField(page, desc, content.text));
+      desc = await ctx.step('Locate description field', () => requireVisible(page, YT.description, 15_000, 'description field'));
+      const sameElement = await title.evaluate((el, other) => el === other, await desc.elementHandle()).catch(() => false);
+      if (sameElement) {
+        ctx.log('YouTube title and description resolved to the same field; skipping the description to protect the title', 'warn');
+        await ctx.snapshot('youtube-fields');
+        desc = null;
+      }
     }
+    // Description first, then the title last, so the dedicated title is the final value.
+    if (desc) await ctx.step('Fill description', () => fillTextField(page, desc!, content.text));
+    await ctx.step('Fill title', () => fillTextField(page, title, content.title ?? ''));
 
     if (content.thumbnail) {
       // Optional: a thumbnail problem is reported, never fails the whole preparation.
@@ -284,11 +294,24 @@ export const youtubeStudioModule: PlatformModule = {
     }
 
     ctx.setStatus('verifying', 'Verifying details…', 60);
-    const titleOk = await fieldContains(title, content.title ?? '').catch(() => null);
-    ctx.check('Title matches', titleOk === null ? 'unverified' : titleOk ? 'pass' : 'fail', titleOk === null ? 'Could not read it back; check it in the dialog.' : undefined);
+    const titleText = await readFieldText(title).catch(() => null);
+    if (titleText === null) {
+      ctx.check('Title', 'unverified', 'Could not read the title back; check it in the dialog.');
+    } else {
+      const wantTitle = content.title ?? '';
+      const matches = normalizeForCompare(titleText) === normalizeForCompare(wantTitle);
+      // Guard against the title ending up as the caption: the main text is usually long and distinct.
+      const looksLikeCaption = !!content.text && content.text.length > 30 && normalizeForCompare(titleText).includes(normalizeForCompare(content.text).slice(0, 40));
+      if (!matches && looksLikeCaption) {
+        ctx.log('Title held the caption; refilling it from the YouTube title field', 'warn');
+        await ctx.step('Refill title', () => fillTextField(page, title, wantTitle));
+      }
+      const after = normalizeForCompare(await readFieldText(title).catch(() => ''));
+      ctx.check('Title matches the YouTube title field', after === normalizeForCompare(wantTitle) ? 'pass' : 'fail', after === normalizeForCompare(wantTitle) ? undefined : 'Check the title in the dialog.');
+    }
     if (content.text) {
-      const desc = await findVisible(page, YT.description, 5000);
-      const ok = desc ? await fieldContains(desc, content.text).catch(() => null) : null;
+      const descEl = await findVisible(page, YT.description, 5000);
+      const ok = descEl ? await fieldContains(descEl, content.text).catch(() => null) : null;
       ctx.check('Description matches', ok === null ? 'unverified' : ok ? 'pass' : 'fail', ok === null ? 'Could not read it back; check it in the dialog.' : undefined);
     }
 

@@ -139,8 +139,9 @@ export function AutomationStatus(props: Props) {
       </div>
     );
   }
-  // Group by post when the batch has titled posts (several posts prepared together).
-  const grouped = props.jobs.some((j) => j.postTitle);
+  // Group by post only when more than one post is present.
+  const postIds = new Set(props.jobs.map((j) => j.postId));
+  const grouped = postIds.size > 1 && props.jobs.some((j) => j.postTitle);
   if (!grouped) {
     return (
       <ul className="job-list">

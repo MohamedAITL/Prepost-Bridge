@@ -34,6 +34,16 @@ type EngineState = 'checking' | 'up' | 'down';
 
 export function Dashboard() {
   const { posts, activeId, draft, update, updatePlatform, updateAll, addPost, duplicatePost, removePost, renamePost, select } = useBatch();
+
+  /** Delete a post, and any of its media files that no remaining post uses. */
+  const deletePost = (id: string) =>
+    run(async () => {
+      const gone = posts.find((p) => p.id === id);
+      removePost(id);
+      if (!gone) return;
+      const keptIds = new Set(posts.filter((p) => p.id !== id).flatMap((p) => p.draft.media.map((m) => m.id)));
+      await Promise.all(gone.draft.media.filter((m) => !keptIds.has(m.id)).map((m) => api.removeMedia(m.id).catch(() => undefined)));
+    });
   const [pending, setPending] = useState<PendingUpload[]>([]);
   const [jobs, setJobs] = useState<JobSnapshot[]>([]);
   const [browser, setBrowser] = useState<BrowserState | null>(null);
@@ -134,15 +144,19 @@ export function Dashboard() {
     [update],
   );
 
+  /** Does any post other than the active one still use this media file? */
+  const usedElsewhere = useCallback((id: string) => posts.some((p) => p.id !== activeId && p.draft.media.some((m) => m.id === id)), [posts, activeId]);
+
   const removeMedia = (id: string) =>
     run(async () => {
-      await api.removeMedia(id);
       update((d) => ({
         ...d,
         media: d.media.filter((m) => m.id !== id),
         coverId: d.coverId === id ? null : d.coverId,
         platforms: Object.fromEntries(Object.entries(d.platforms).map(([k, v]) => [k, v.mediaIds ? { ...v, mediaIds: v.mediaIds.filter((x) => x !== id) } : v])) as typeof d.platforms,
       }));
+      // Keep the file in the engine while another post (e.g. a duplicate) still references it.
+      if (!usedElsewhere(id)) await api.removeMedia(id);
     });
 
   const moveMedia = (id: string, dir: -1 | 1) =>
@@ -165,7 +179,9 @@ export function Dashboard() {
 
   const clearContent = () =>
     run(async () => {
-      await api.clearMedia();
+      // Delete only this post's files that no other post uses; leave the shared pool otherwise.
+      const orphans = draft.media.filter((m) => !usedElsewhere(m.id)).map((m) => m.id);
+      await Promise.all(orphans.map((id) => api.removeMedia(id).catch(() => undefined)));
       update((d) => ({
         ...d,
         sharedText: '',
@@ -177,7 +193,7 @@ export function Dashboard() {
       }));
       setPending([]);
       setConfirmClear(false);
-    }, 'Content cleared. Posts already prepared in your browser are not affected.');
+    }, 'This post was cleared. Other posts and anything already prepared are untouched.');
 
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const selected = enabledDestinations(draft);
@@ -273,7 +289,7 @@ export function Dashboard() {
         onSelect={select}
         onAdd={addPost}
         onDuplicate={duplicatePost}
-        onRemove={removePost}
+        onRemove={deletePost}
         onRename={renamePost}
       />
 

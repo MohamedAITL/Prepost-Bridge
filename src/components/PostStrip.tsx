@@ -52,7 +52,7 @@ export function PostStrip({ posts, activeId, errors, onSelect, onAdd, onDuplicat
   return (
     <div className="post-strip" role="tablist" aria-label="Posts">
       {posts.map((p) => (
-        <div key={p.id} className={`post-tab${p.id === activeId ? ' is-active' : ''}`}>
+        <div key={p.id} className={`post-tab${p.id === activeId ? ' is-active' : ''}${menuId === p.id ? ' has-menu' : ''}`}>
           {editingId === p.id ? (
             <input
               autoFocus

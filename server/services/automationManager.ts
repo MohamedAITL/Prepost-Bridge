@@ -534,8 +534,9 @@ class AutomationManager extends EventEmitter {
     this.emitChange();
   }
 
-  private keyBusy(key: string) {
-    return [...this.jobs.values()].some((j) => tabKey(j.plan) === key && ACTIVE_STATUSES.includes(j.snap.status));
+  /** Any active job of this module (across all posts). */
+  private moduleBusy(moduleId: ModuleId): boolean {
+    return [...this.jobs.values()].some((j) => j.plan.moduleId === moduleId && ACTIVE_STATUSES.includes(j.snap.status));
   }
 
   /** Extension mode: hand the tab back (removes Chrome's debugging bar); it stays open for reuse. */
@@ -545,8 +546,8 @@ class AutomationManager extends EventEmitter {
 
   /** Read the Page list from Business Suite, in an existing Meta tab when there's an idle one. */
   async refreshMetaPages(): Promise<MetaPage[]> {
-    const key = [...this.platformTabs.keys()].find((k) => k.startsWith('meta:') && !this.keyBusy(k)) ?? 'meta:';
-    const page = await this.acquireTab(key);
+    if (this.moduleBusy('meta')) throw new Error('A Meta post is being prepared; try again when it has finished.');
+    const page = await this.acquireTab('meta:pages');
     try {
       const pages = await readMetaPages(page).catch(async (e) => {
         const file = await savePageOutline(page, 'meta-pages', `Error: ${(e as Error).message}`);
@@ -562,8 +563,8 @@ class AutomationManager extends EventEmitter {
 
   /** Read the channel list from YouTube's channel switcher, in the YouTube tab. */
   async refreshYouTubeChannels(): Promise<YouTubeChannel[]> {
-    if (this.keyBusy('youtube')) throw new Error('A YouTube job is running; try again when it has finished.');
-    const page = await this.acquireTab('youtube');
+    if (this.moduleBusy('youtube')) throw new Error('A YouTube post is being prepared; try again when it has finished.');
+    const page = await this.acquireTab('youtube:channels');
     try {
       const channels = await readYouTubeChannels(page).catch(async (e) => {
         const file = await savePageOutline(page, 'youtube-channels', `Error: ${(e as Error).message}`);
@@ -580,10 +581,10 @@ class AutomationManager extends EventEmitter {
   /** Show this platform's tab (opening it once if needed), e.g. to sign in. */
   async openPlatform(moduleId: ModuleId) {
     const mod = MODULES[moduleId];
-    const key = moduleId === 'meta' ? ([...this.platformTabs.keys()].find((k) => k.startsWith('meta:')) ?? 'meta:') : moduleId;
-    const running = [...this.jobs.values()].find((j) => tabKey(j.plan) === key && ACTIVE_STATUSES.includes(j.snap.status));
+    // If a post on this platform is being prepared, show that tab instead of opening another.
+    const running = [...this.jobs.values()].find((j) => j.plan.moduleId === moduleId && ACTIVE_STATUSES.includes(j.snap.status));
     if (running) return this.focus(running.snap.id);
-    const page = await this.acquireTab(key);
+    const page = await this.acquireTab(`${moduleId}:open`);
     // Only navigate when the tab isn't already on this platform (keeps whatever you were doing there).
     if (!page.url().includes(new URL(mod.entryUrl).hostname.replace(/^www\./, ''))) {
       await page.goto(mod.entryUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });

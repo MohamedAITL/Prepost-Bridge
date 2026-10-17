@@ -126,7 +126,7 @@ export function useBatch() {
   const addPost = useCallback(() => {
     setPosts((prev) => {
       const post: BatchPost = { id: newId(), title: nextTitle(prev), draft: freshDraft() };
-      setActiveId(post.id);
+      queueMicrotask(() => setActiveId(post.id));
       return [...prev, post];
     });
   }, [nextTitle]);
@@ -137,7 +137,7 @@ export function useBatch() {
         const src = prev.find((p) => p.id === id);
         if (!src) return prev;
         const copy: BatchPost = { id: newId(), title: nextTitle(prev), draft: structuredClone(src.draft) };
-        setActiveId(copy.id);
+        queueMicrotask(() => setActiveId(copy.id));
         const i = prev.findIndex((p) => p.id === id);
         return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)];
       });
@@ -145,17 +145,14 @@ export function useBatch() {
     [nextTitle],
   );
 
-  const removePost = useCallback(
-    (id: string) => {
-      setPosts((prev) => {
-        if (prev.length === 1) return prev;
-        const next = prev.filter((p) => p.id !== id);
-        setActiveId((cur) => (cur === id ? next[0].id : cur));
-        return next;
-      });
-    },
-    [],
-  );
+  const removePost = useCallback((id: string) => {
+    setPosts((prev) => {
+      if (prev.length === 1) return prev;
+      const next = prev.filter((p) => p.id !== id);
+      queueMicrotask(() => setActiveId((cur) => (cur === id ? next[0].id : cur)));
+      return next;
+    });
+  }, []);
 
   const renamePost = useCallback((id: string, title: string) => {
     const clean = title.trim().slice(0, 80);
