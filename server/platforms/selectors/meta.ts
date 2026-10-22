@@ -40,6 +40,9 @@ export const META = {
   assetSwitcherCombobox: /^(instagram\s+)?facebook\s+\S/i,
   assetSwitcherName: /^pressable$/i,
   assetMenu: /business assets|actifs (de l['’]entreprise|professionnels)|أصول (النشاط|الأعمال)/i,
+  /** Brand icons inside the switcher and the menu rows (their names are not translated, except sometimes in Arabic). */
+  facebookIcon: /^(facebook|فيسبوك|فيس بوك)$/i,
+  instagramIcon: /^(instagram|إنستغرام|انستغرام|إنستجرام|انستجرام)$/i,
 
   fileInput: ['input[type="file"][accept*="image"][accept*="video"]', 'input[type="file"][accept*="image"]', 'input[type="file"][accept*="video"]', 'input[type="file"]'],
   /** Opens the media picker when no file input is present in the DOM. */

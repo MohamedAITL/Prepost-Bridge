@@ -171,28 +171,41 @@ async function currentAssetId(page: Page): Promise<string | null> {
   return href ? new URL(href, 'https://business.facebook.com').searchParams.get('asset_id') : null;
 }
 
+/** The menu is open once its Page rows (a radio each) or its "N business assets" title show. */
+async function assetMenuOpen(page: Page, timeoutMs: number): Promise<boolean> {
+  return !!(await pollUntil(
+    async () => (await assetRows(page).first().isVisible().catch(() => false)) || (await page.getByText(META.assetMenu).first().isVisible().catch(() => false)),
+    timeoutMs,
+  ));
+}
+
 async function openAssetMenu(page: Page): Promise<boolean> {
+  if (await assetMenuOpen(page, 0)) return true;
+  // Wait for Business Suite's left column, where the switcher lives (slow on first load).
+  const fbIcon = page.getByRole('img', { name: META.facebookIcon });
+  await pollUntil(async () => fbIcon.first().isVisible().catch(() => false), 20_000);
+  const notPostTo = { hasNot: page.getByText(META.postTo) };
   const candidates = [
-    page.getByRole('combobox', { name: META.assetSwitcherCombobox }).filter({ hasNot: page.getByText(META.postTo) }),
+    page.getByRole('combobox', { name: META.assetSwitcherCombobox }).filter(notPostTo),
     page.getByRole('button', { name: META.assetSwitcherName }),
+    // Language/layout independent: any button or combobox showing the Facebook icon (brand icons keep their name).
+    page.getByRole('button').filter({ has: fbIcon }).filter(notPostTo),
+    page.getByRole('combobox').filter({ has: fbIcon }).filter(notPostTo),
   ];
-  let opener = null;
+  const tried = new Set<string>();
   for (const c of candidates) {
-    if (await c.first().isVisible().catch(() => false)) {
-      opener = c.first();
-      break;
+    const n = Math.min(await c.count().catch(() => 0), 3);
+    for (let i = 0; i < n; i++) {
+      const opener = c.nth(i);
+      if (!(await opener.isVisible().catch(() => false))) continue;
+      const key = (await opener.evaluate((el) => el.outerHTML.slice(0, 300)).catch(() => '')) || `${i}`;
+      if (tried.has(key)) continue;
+      tried.add(key);
+      await safeClick(opener, 'Business asset menu', { forbiddenSelectors: META.forbidden }).catch(() => undefined);
+      if (await assetMenuOpen(page, 6000)) return true;
     }
   }
-  if (!opener) return false;
-  await safeClick(opener, 'Business asset menu', { forbiddenSelectors: META.forbidden });
-  return page
-    .getByText(META.assetMenu)
-    .first()
-    .waitFor({ state: 'visible', timeout: 10_000 })
-    .then(
-      () => true,
-      () => false,
-    );
+  return false;
 }
 
 async function assetIdNow(page: Page): Promise<string | null> {
@@ -275,7 +288,7 @@ async function readAssetRows(page: Page): Promise<{ page: MetaPage; radio: Locat
     const row = rows.nth(i);
     const heading = await row.getByRole('heading').first().innerText().catch(() => '');
     if (!heading.trim()) continue;
-    const instagram = (await row.getByRole('img', { name: 'Instagram' }).count()) > 0;
+    const instagram = (await row.getByRole('img', { name: META.instagramIcon }).count()) > 0;
     const name = pageNameFromHeading(heading, instagram);
     if (!out.some((r) => r.page.name === name)) out.push({ page: { name, instagram }, radio: row.getByRole('radio').first() });
   }
