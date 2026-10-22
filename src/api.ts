@@ -69,6 +69,8 @@ export async function connectEngine(): Promise<EngineInfo[] | null> {
   }
   const engines = await findEngines();
   if (!engines.length) throw new ApiError('No engine is running on this computer.');
+  // "Switch user" always shows the list, even with a single engine, so you see who was found.
+  if (new URLSearchParams(window.location.search).has('switch-user')) return engines;
   const saved = savedUser();
   const pick = saved !== null ? engines.find((e) => e.user === saved) : engines.length === 1 ? engines[0] : undefined;
   if (!pick) return engines;

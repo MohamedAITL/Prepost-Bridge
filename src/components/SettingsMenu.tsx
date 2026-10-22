@@ -138,9 +138,8 @@ export function SettingsMenu({ browser, busy, run }: Props) {
                   type="button"
                   className="btn small"
                   onClick={() => {
-                    // Forget the choice; with several engines running, the picker asks again.
                     chooseEngineUser(null);
-                    window.location.reload();
+                    window.location.search = '?switch-user';
                   }}
                 >
                   Switch user

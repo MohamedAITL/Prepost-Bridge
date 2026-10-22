@@ -36,7 +36,7 @@ function CopyLine({ text }: { text: string }) {
 export function EnginePicker({ engines }: { engines: EngineInfo[] }) {
   const pick = (user: string) => {
     chooseEngineUser(user);
-    window.location.reload();
+    window.location.href = window.location.pathname; // drops ?switch-user
   };
   return (
     <div className="setup-screen">
@@ -46,7 +46,10 @@ export function EnginePicker({ engines }: { engines: EngineInfo[] }) {
           <div>
             <h1>Which Windows user are you?</h1>
             <p className="muted">
-              Prepost is running for {engines.length === 1 ? 'one user' : `${engines.length} users`} on this computer. Pick yours so your posts open in your own browser and accounts. If your name is missing, run <code>npm start</code> in your own Windows session first.
+              Prepost is running for {engines.length === 1 ? 'one user' : `${engines.length} users`} on this computer. Pick yours so your posts open in your own browser and accounts.
+            </p>
+            <p className="muted small">
+              Someone missing? In <strong>their own</strong> Windows session, open the Prepost folder and run <code>git pull</code> then <code>npm start</code> (not <code>npm run dev</code>), keep that window open, then press Check again. Older versions can't run for two users at once.
             </p>
           </div>
         </div>
