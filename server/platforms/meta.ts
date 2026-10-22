@@ -25,7 +25,7 @@ async function findAddMediaButton(page: Page, video: boolean): Promise<Locator |
 }
 
 async function attachViaPicker(ctx: PrepareContext, page: Page, paths: string[], video: boolean) {
-  const opener = await findAddMediaButton(page, video);
+  const opener = await ctx.step('Find Add photo/video button', () => findAddMediaButton(page, video));
   if (!opener) {
     // Label in another language or a new layout: hand the files to the composer's own file input.
     const input = await findAttached(page, video ? ['input[type="file"][accept*="video"]'] : META.fileInput, 3000);
@@ -36,12 +36,14 @@ async function attachViaPicker(ctx: PrepareContext, page: Page, paths: string[],
   }
   const chooser = page.waitForEvent('filechooser', { timeout: 20_000 });
   chooser.catch(() => undefined); // if the clicks below fail, this must not become an unhandled rejection
-  await safeClick(opener, 'Add photo/video', { forbiddenSelectors: META.forbidden });
-  const menuItem = page.getByRole('menuitem', { name: META.uploadFromComputer }).or(page.getByRole('button', { name: META.uploadFromComputer }));
-  if (await menuItem.first().isVisible().catch(() => false)) {
-    await safeClick(menuItem, 'Upload from computer', { forbiddenSelectors: META.forbidden });
+  const label = (await opener.innerText().catch(() => '')).trim() || 'Add photo/video';
+  await ctx.step(`Click "${label}"`, () => safeClick(opener, label, { forbiddenSelectors: META.forbidden, timeout: 5000 }));
+  // Some layouts open a small menu first ("Upload from computer"); give it a moment to appear.
+  const menuItem = page.getByRole('menuitem', { name: META.uploadFromComputer }).or(page.getByRole('button', { name: META.uploadFromComputer })).filter({ visible: true });
+  if (await menuItem.first().waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false)) {
+    await ctx.step('Click "Upload from computer"', () => safeClick(menuItem, 'Upload from computer', { forbiddenSelectors: META.forbidden }));
   }
-  const fc = await chooser;
+  const fc = await ctx.step('Wait for the file picker', () => chooser);
   if (paths.length > 1 && !fc.isMultiple()) throw new Error('The Meta media picker only accepts one file at a time here.');
   await fc.setFiles(paths);
   ctx.log('Files attached through the media picker');

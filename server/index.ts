@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import type { Server } from 'node:http';
 import os from 'node:os';
@@ -292,7 +293,16 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(400).json({ error: message });
 });
 
-const ENGINE_PORTS =Array.from({ length: 10 }, (_, i) => 5174 + i);
+/** The git commit this engine runs, so "did you git pull?" can be answered from the log. */
+function codeVersion(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: path.dirname(fileURLToPath(import.meta.url)), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+const ENGINE_PORTS = Array.from({ length: 10 }, (_, i) => 5174 + i);
 
 function listenOn(port: number): Promise<Server> {
   return new Promise((resolve, reject) => {
@@ -337,7 +347,7 @@ async function main() {
   fs.chmodSync(config.dataDir, 0o700);
   await mediaStore.init();
   const server = await listenForThisUser();
-  logger.info('server', `API listening on http://${config.host}:${config.port} (user ${os.userInfo().username})`);
+  logger.info('server', `API listening on http://${config.host}:${config.port} (user ${os.userInfo().username}, version ${codeVersion()})`);
   if (config.production) logger.info('server', `Open http://localhost:${config.port} in your browser`);
   cdpRelay.attach(server);
   const shutdown = async () => {
