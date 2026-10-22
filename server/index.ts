@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import type { Server } from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express, { type NextFunction, type Request, type Response } from 'express';
@@ -158,7 +160,8 @@ app.delete('/api/jobs', (_req, res) => {
 
 // ---------- browser ----------
 app.get('/api/browser', (_req, res) => res.json(browserManager.state()));
-app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'prepost-engine' }));
+// `user` lets a hosted dashboard tell apart the engines of several Windows users on one PC.
+app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'prepost-engine', user: os.userInfo().username, port: config.port }));
 app.post(
   '/api/browser/open',
   asyncRoute(async (req, res) => {
@@ -288,14 +291,53 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(400).json({ error: message });
 });
 
+const ENGINE_PORTS =Array.from({ length: 10 }, (_, i) => 5174 + i);
+
+function listenOn(port: number): Promise<Server> {
+  return new Promise((resolve, reject) => {
+    const s = app.listen(port, config.host);
+    s.once('listening', () => resolve(s));
+    s.once('error', reject);
+  });
+}
+
+/**
+ * Every Windows user signed in on one PC shares 127.0.0.1, so each user's engine needs its own port.
+ * `npm start` keeps the port it used last time (saved in this user's data folder, so the extension's
+ * port setting stays valid) and otherwise takes the first free one of 5174–5183. PORT pins it (dev).
+ */
+async function listenForThisUser(): Promise<Server> {
+  const portFile = path.join(config.dataDir, 'engine-port');
+  let saved = 0;
+  try {
+    saved = Number(fs.readFileSync(portFile, 'utf8').trim()) || 0;
+  } catch {
+    /* first start for this user */
+  }
+  const candidates = !config.production || process.env.PORT ? [config.port] : [...new Set([saved, ...ENGINE_PORTS].filter(Boolean))];
+  for (const port of candidates) {
+    try {
+      const server = await listenOn(port);
+      config.port = port;
+      // Chrome's debugging port would collide the same way in "Google Chrome, separate profile" mode.
+      if (!process.env.SPA_CHROME_DEBUG_PORT) config.chromeDebugPort = 9222 + (port - 5174);
+      fs.writeFileSync(portFile, String(port));
+      return server;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EADDRINUSE' || port === candidates.at(-1)) throw e;
+      logger.info('server', `Port ${port} is taken (another user's Prepost?), trying the next one`);
+    }
+  }
+  throw new Error('No free port');
+}
+
 async function main() {
   fs.mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
   fs.chmodSync(config.dataDir, 0o700);
   await mediaStore.init();
-  const server = app.listen(config.port, config.host, () => {
-    logger.info('server', `API listening on http://${config.host}:${config.port}`);
-    if (config.production) logger.info('server', `Open http://localhost:${config.port} in your browser`);
-  });
+  const server = await listenForThisUser();
+  logger.info('server', `API listening on http://${config.host}:${config.port} (user ${os.userInfo().username})`);
+  if (config.production) logger.info('server', `Open http://localhost:${config.port} in your browser`);
   cdpRelay.attach(server);
   const shutdown = async () => {
     logger.info('server', 'Shutting down');

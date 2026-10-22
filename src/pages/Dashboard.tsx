@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BroomIcon, PaperPlaneTiltIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react';
 import { emptyPlatformConfig, type MetaPage, type YouTubeChannel } from '../../shared/types';
 import { batchProblems, enabledDestinations, planBatch, planJobs, validateDraft } from '../../shared/validation';
-import { ApiError, IS_HOSTED, api, probeMedia } from '../api';
+import { ApiError, IS_HOSTED, api, connectEngine, probeMedia, type EngineInfo } from '../api';
 import { AutomationStatus } from '../components/AutomationStatus';
 import { AppLogo, BRAND_NAMES } from '../components/Brand';
 import { BridgeSetup } from '../components/BridgeSetup';
 import { ContentEditor } from '../components/ContentEditor';
-import { EngineSetup } from '../components/EngineSetup';
+import { EnginePicker, EngineSetup } from '../components/EngineSetup';
 import { LinkInput } from '../components/LinkInput';
 import { MediaUploader, type PendingUpload } from '../components/MediaUploader';
 import { MetaPagePicker } from '../components/MetaPagePicker';
@@ -50,6 +50,7 @@ export function Dashboard() {
   const [notice, setNotice] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [engine, setEngine] = useState<EngineState>('checking');
+  const [engineChoices, setEngineChoices] = useState<EngineInfo[] | null>(null);
   const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
   const [ytChannels, setYtChannels] = useState<YouTubeChannel[]>([]);
 
@@ -74,10 +75,10 @@ export function Dashboard() {
   // Find the engine, then load what it knows (media, Pages, channels).
   useEffect(() => {
     let alive = true;
-    api
-      .health()
-      .then(() => {
+    connectEngine()
+      .then((choices) => {
         if (!alive) return;
+        if (choices) return setEngineChoices(choices);
         setEngine('up');
         // The engine may have restarted (it clears uploads): drop references to files it no longer has.
         api.listMedia().then((media) =>
@@ -216,6 +217,7 @@ export function Dashboard() {
     });
 
   if (IS_HOSTED && engine === 'down') return <EngineSetup onRetry={() => window.location.reload()} />;
+  if (engineChoices) return <EnginePicker engines={engineChoices} />;
 
   const connectionChip =
     engine !== 'up' ? (

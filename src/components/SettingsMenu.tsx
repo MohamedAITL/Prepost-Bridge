@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { DesktopIcon, GearSixIcon, MoonIcon, SunIcon } from '@phosphor-icons/react';
-import { api } from '../api';
+import { IS_HOSTED, api, chooseEngineUser, engineUser } from '../api';
 import type { BrowserMode, BrowserState } from '../types/platform';
 
 interface Props {
@@ -128,6 +128,25 @@ export function SettingsMenu({ browser, busy, run }: Props) {
                 Disconnect
               </button>
             </div>
+          )}
+          {IS_HOSTED && engineUser !== null && (
+            <>
+              <p className="popover-title">Windows user</p>
+              <div className="popover-actions">
+                <span dir="auto">{engineUser || 'Unknown user'}</span>
+                <button
+                  type="button"
+                  className="btn small"
+                  onClick={() => {
+                    // Forget the choice; with several engines running, the picker asks again.
+                    chooseEngineUser(null);
+                    window.location.reload();
+                  }}
+                >
+                  Switch user
+                </button>
+              </div>
+            </>
           )}
         </div>
       )}

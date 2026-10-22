@@ -44,7 +44,7 @@ export function BridgeSetup({ browser }: { browser: BrowserState }) {
           <CopyLine text={bridge.extensionDir} />
         </li>
         <li>
-          Click the extension's icon, paste this pairing code and press <strong>Save &amp; connect</strong>:
+          Click the extension's icon, paste this pairing code{bridge.port !== 5174 && <> and set <strong>Port</strong> to <strong>{bridge.port}</strong> (another Windows user on this PC uses 5174)</>}, then press <strong>Save &amp; connect</strong>:
           <CopyLine text={bridge.pairingCode} />
         </li>
       </ol>

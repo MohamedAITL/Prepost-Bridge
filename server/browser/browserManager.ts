@@ -158,7 +158,7 @@ class BrowserManager extends EventEmitter {
       profileDir: this.mode === 'chrome' ? config.chromeProfileDir : this.mode === 'extension' ? 'your own Chrome profile' : config.profileDir,
       channel: this.mode === 'chrome' ? 'Google Chrome' : this.mode === 'extension' ? 'your Chrome (extension bridge)' : config.browserChannel || 'chromium (bundled)',
       chromeAvailable: !!findChrome(),
-      bridge: { ...cdpRelay.status(), pairingCode: cdpRelay.pairingCode, extensionDir: EXTENSION_DIR },
+      bridge: { ...cdpRelay.status(), pairingCode: cdpRelay.pairingCode, extensionDir: EXTENSION_DIR, port: config.port },
     };
   }
 

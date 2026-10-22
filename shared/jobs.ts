@@ -77,5 +77,5 @@ export interface BrowserState {
   profileDir: string;
   channel: string;
   chromeAvailable: boolean;
-  bridge: { extensionConnected: boolean; extensionVersion: string | null; controlledTabs: number; pairingCode: string; extensionDir: string };
+  bridge: { extensionConnected: boolean; extensionVersion: string | null; controlledTabs: number; pairingCode: string; extensionDir: string; port: number };
 }

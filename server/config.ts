@@ -26,6 +26,7 @@ const dataDir = process.env.SPA_DATA_DIR ? path.resolve(process.env.SPA_DATA_DIR
 export const config = {
   host: '127.0.0.1',
   allowedOrigins: loadAllowedOrigins(),
+  /** Preferred port. `npm start` moves to the next free one when another Windows user's engine has it (see index.ts). */
   port: Number(process.env.PORT ?? 5174),
   /** Serve the built dashboard (dist/) from the engine too. */
   production: process.env.NODE_ENV === 'production' || process.argv.includes('--prod'),

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { ArrowClockwiseIcon, CopyIcon, DesktopIcon } from '@phosphor-icons/react';
-import { ENGINE_URL } from '../api';
+import { ArrowClockwiseIcon, CopyIcon, DesktopIcon, UserIcon } from '@phosphor-icons/react';
+import { ENGINE_URL, chooseEngineUser, type EngineInfo } from '../api';
 import { AppLogo } from './Brand';
 
 const REPO_URL = (import.meta.env.VITE_REPO_URL as string | undefined) ?? '';
@@ -25,6 +25,45 @@ function CopyLine({ text }: { text: string }) {
       >
         <CopyIcon size={14} aria-hidden /> {copied ? 'Copied' : 'Copy'}
       </button>
+    </div>
+  );
+}
+
+/**
+ * Several Windows users on this PC run Prepost (each on its own port). The browser can't tell which
+ * Windows user it belongs to, so ask once and remember it in this browser.
+ */
+export function EnginePicker({ engines }: { engines: EngineInfo[] }) {
+  const pick = (user: string) => {
+    chooseEngineUser(user);
+    window.location.reload();
+  };
+  return (
+    <div className="setup-screen">
+      <div className="setup-card">
+        <div className="setup-head">
+          <AppLogo size={36} />
+          <div>
+            <h1>Which Windows user are you?</h1>
+            <p className="muted">
+              Prepost is running for {engines.length === 1 ? 'one user' : `${engines.length} users`} on this computer. Pick yours so your posts open in your own browser and accounts. If your name is missing, run <code>npm start</code> in your own Windows session first.
+            </p>
+          </div>
+        </div>
+        <div className="choice-list">
+          {engines.map((e) => (
+            <button key={e.url} type="button" className="btn" onClick={() => pick(e.user)}>
+              <UserIcon size={16} aria-hidden /> <strong dir="auto">{e.user || 'Unknown user'}</strong> <span className="muted small">{new URL(e.url).port}</span>
+            </button>
+          ))}
+        </div>
+        <div className="setup-foot">
+          <span />
+          <button type="button" className="btn primary" onClick={() => window.location.reload()}>
+            <ArrowClockwiseIcon size={16} aria-hidden /> Check again
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

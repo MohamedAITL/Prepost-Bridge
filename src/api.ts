@@ -7,9 +7,75 @@ import type { BrowserMode, BrowserState, JobSnapshot, ModuleId } from './types/p
  * Where the engine runs. '' = same origin (the engine serves this dashboard, or Vite proxies it).
  * A hosted dashboard (Netlify) sets VITE_ENGINE_URL=http://127.0.0.1:5174 at build time.
  */
-export const ENGINE_URL = ((import.meta.env.VITE_ENGINE_URL as string | undefined) ?? '').replace(/\/$/, '');
+export let ENGINE_URL = ((import.meta.env.VITE_ENGINE_URL as string | undefined) ?? '').replace(/\/$/, '');
 export const IS_HOSTED = ENGINE_URL !== '';
 const u = (path: string) => `${ENGINE_URL}${path}`;
+
+// ---------- several Windows users on one PC ----------
+// They share 127.0.0.1, so each user's engine runs on its own port (5174–5183, see server/index.ts).
+
+export interface EngineInfo {
+  url: string;
+  /** The Windows (or macOS) user running that engine; '' for engines older than this check. */
+  user: string;
+}
+
+const USER_KEY = 'prepost.engineUser';
+/** The engine the dashboard is talking to (hosted dashboard only). */
+export let engineUser: string | null = null;
+
+export async function findEngines(): Promise<EngineInfo[]> {
+  const base = new URL(ENGINE_URL);
+  const found = await Promise.all(
+    Array.from({ length: 10 }, async (_, i) => {
+      const url = `${base.protocol}//${base.hostname}:${5174 + i}`;
+      try {
+        const h = await (await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2000) })).json();
+        return h?.app === 'prepost-engine' ? { url, user: String(h.user ?? '') } : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return found.filter((e): e is EngineInfo => !!e);
+}
+
+function savedUser(): string | null {
+  try {
+    return localStorage.getItem(USER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function chooseEngineUser(user: string | null) {
+  try {
+    if (user === null) localStorage.removeItem(USER_KEY);
+    else localStorage.setItem(USER_KEY, user);
+  } catch {
+    /* storage unavailable: asks again next visit */
+  }
+}
+
+/**
+ * Connect to this person's engine. Returns null when connected, or the engines to choose from when
+ * several Windows users run Prepost here (or the remembered user's engine isn't running).
+ * Throws when no engine is running.
+ */
+export async function connectEngine(): Promise<EngineInfo[] | null> {
+  if (!IS_HOSTED) {
+    await api.health();
+    return null;
+  }
+  const engines = await findEngines();
+  if (!engines.length) throw new ApiError('No engine is running on this computer.');
+  const saved = savedUser();
+  const pick = saved !== null ? engines.find((e) => e.user === saved) : engines.length === 1 ? engines[0] : undefined;
+  if (!pick) return engines;
+  ENGINE_URL = pick.url;
+  engineUser = pick.user;
+  return null;
+}
 
 export interface PostProblem {
   postId: string;
