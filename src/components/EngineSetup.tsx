@@ -51,6 +51,9 @@ export function EnginePicker({ engines }: { engines: EngineInfo[] }) {
             <p className="muted small">
               Someone missing? In <strong>their own</strong> Windows session, open the Prepost folder and run <code>git pull</code> then <code>npm start</code> (not <code>npm run dev</code>), keep that window open, then press Check again. Older versions can't run for two users at once.
             </p>
+            <p className="muted small">New user on this computer? In their own session, install it once (needs Node.js 20+ and Git), then start it:</p>
+            <CopyLine text={`cd $HOME; git clone ${REPO_URL || '<repository URL>'} prepost; cd prepost; npm install; npm run setup:browser`} />
+            <CopyLine text="cd $HOME\prepost; npm start" />
           </div>
         </div>
         <div className="choice-list">
