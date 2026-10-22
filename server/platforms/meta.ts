@@ -7,10 +7,36 @@ import { META } from './selectors/meta';
 import { readSettings, writeSettings } from '../utils/settings';
 import type { PlatformModule, PrepareContext } from './types';
 
-async function attachViaPicker(ctx: PrepareContext, page: Page, paths: string[]) {
+/** The enabled "Add …" media button that fits the media ("Add Video" for a Reel), or any enabled one. */
+async function findAddMediaButton(page: Page, video: boolean): Promise<Locator | null> {
+  const buttons = page.getByRole('button', { name: META.addMediaButton }).filter({ visible: true });
+  const fits = video ? /video|vidéo|vídeo|فيديو/i : /photo|foto|صور/i;
+  return pollUntil(async () => {
+    let fallback: Locator | null = null;
+    for (let i = 0; i < (await buttons.count()); i++) {
+      const b = buttons.nth(i);
+      if (!(await observeOnly(b)).enabled) continue;
+      const name = `${await b.innerText().catch(() => '')} ${(await b.getAttribute('aria-label').catch(() => '')) ?? ''}`;
+      if (fits.test(name)) return b;
+      fallback ??= b;
+    }
+    return fallback;
+  }, 15_000, 500);
+}
+
+async function attachViaPicker(ctx: PrepareContext, page: Page, paths: string[], video: boolean) {
+  const opener = await findAddMediaButton(page, video);
+  if (!opener) {
+    // Label in another language or a new layout: hand the files to the composer's own file input.
+    const input = await findAttached(page, video ? ['input[type="file"][accept*="video"]'] : META.fileInput, 3000);
+    if (!input) throw new Error('Could not find Meta\'s "Add photo/video" button or a file input. Add the media in the tab, then press Retry.');
+    await setFiles(input, paths);
+    ctx.log('Files attached through the composer\'s file input');
+    return;
+  }
   const chooser = page.waitForEvent('filechooser', { timeout: 20_000 });
   chooser.catch(() => undefined); // if the clicks below fail, this must not become an unhandled rejection
-  await safeClick(page.getByRole('button', { name: META.addMediaButton }), 'Add photo/video', { forbiddenSelectors: META.forbidden });
+  await safeClick(opener, 'Add photo/video', { forbiddenSelectors: META.forbidden });
   const menuItem = page.getByRole('menuitem', { name: META.uploadFromComputer }).or(page.getByRole('button', { name: META.uploadFromComputer }));
   if (await menuItem.first().isVisible().catch(() => false)) {
     await safeClick(menuItem, 'Upload from computer', { forbiddenSelectors: META.forbidden });
@@ -397,7 +423,7 @@ export const metaModule: PlatformModule = {
       const hasVideo = content.media.some((m) => m.item.kind === 'video');
       const input = reel ? null : await findAttached(page, hasVideo ? ['input[type="file"][accept*="video"]'] : META.fileInput, 3000);
       if (input) await ctx.step('Attach media files', () => setFiles(input, content.media.map((m) => m.path)));
-      else await ctx.step('Attach media via picker', () => attachViaPicker(ctx, page, content.media.map((m) => m.path)));
+      else await ctx.step('Attach media via picker', () => attachViaPicker(ctx, page, content.media.map((m) => m.path), hasVideo));
 
       const totalBytes = content.media.reduce((s, m) => s + m.item.size, 0);
       const timeout = 60_000 + Math.ceil(totalBytes / (256 * 1024)) * 1000;

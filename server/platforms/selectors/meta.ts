@@ -46,7 +46,8 @@ export const META = {
 
   fileInput: ['input[type="file"][accept*="image"][accept*="video"]', 'input[type="file"][accept*="image"]', 'input[type="file"][accept*="video"]', 'input[type="file"]'],
   /** Opens the media picker when no file input is present in the DOM. */
-  addMediaButton: /^(add photo\/video|add photo|add video|ajouter une photo\/vidéo|ajouter une photo|إضافة صورة\/فيديو|إضافة صورة)$/i,
+  /** Seen 2026-10: "Add photo/video" (posts), "Add Video" / "Add Photos" (Reels); any language's "Add … photo/video". */
+  addMediaButton: /^(add|ajouter|إضافة|agregar|añadir|adicionar)\s.*(photo|video|vidéo|vídeo|foto|صور|فيديو)/i,
   uploadFromComputer: /upload from (desktop|computer)|importer depuis (l['’]ordinateur|le bureau)|التحميل من (الكمبيوتر|سطح المكتب)/i,
   uploadProgress: ['[role="progressbar"]'],
   /** Local previews of the files you added. */
