@@ -8,6 +8,8 @@ import type { Locator } from 'playwright';
  * (Post, Publish, Share, Send, Schedule, Save, Done… in English, French and Arabic), anything
  * matching a module's forbidden selectors, and any submit-type button. A refusal stops that
  * platform's job; it is never retried automatically.
+ *
+ * Exception: publishClick() below, used only when the user turned auto-publish on for a batch.
  */
 
 export class SafetyError extends Error {
@@ -138,6 +140,27 @@ export async function safeClick(
   } catch (e) {
     // Some editors draw a layer over their own buttons, so a pointer click never lands. The
     // element was already vetted above: press it directly instead.
+    if (!/intercepts pointer events|Timeout/i.test((e as Error).message)) throw e;
+    await target.evaluate((el) => (el as HTMLElement).click());
+  }
+}
+
+/**
+ * The ONE way to press a final Post/Publish/Share button: only for a job the user started with
+ * auto-publish switched on (`allowed`), and only through PrepareContext.publishClick.
+ */
+export async function publishClick(locator: Locator, purpose: string, allowed: boolean, timeoutMs = 60_000): Promise<void> {
+  if (allowed !== true) throw new SafetyError(`Refused to press "${purpose}": auto-publish is off for this job.`);
+  const target = locator.first();
+  await target.waitFor({ state: 'visible', timeout: timeoutMs });
+  const deadline = Date.now() + timeoutMs;
+  while (!(await observeOnly(target)).enabled) {
+    if (Date.now() > deadline) throw new Error(`"${purpose}" stayed disabled; the platform may still be processing, or the post is invalid.`);
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  try {
+    await target.click({ timeout: 15_000 });
+  } catch (e) {
     if (!/intercepts pointer events|Timeout/i.test((e as Error).message)) throw e;
     await target.evaluate((el) => (el as HTMLElement).click());
   }

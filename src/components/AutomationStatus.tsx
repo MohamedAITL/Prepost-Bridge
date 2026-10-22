@@ -32,7 +32,7 @@ const CHECK_ICON = {
 };
 
 function StatusIcon({ job }: { job: JobSnapshot }) {
-  if (job.status === 'ready') return <CheckCircleIcon size={18} weight="fill" aria-hidden />;
+  if (job.status === 'ready' || job.status === 'published') return <CheckCircleIcon size={18} weight="fill" aria-hidden />;
   if (job.status === 'failed') return <XCircleIcon size={18} weight="fill" aria-hidden />;
   if (job.status === 'needs_attention' || job.status === 'login_required' || job.awaitingUser) return <WarningCircleIcon size={18} weight="fill" aria-hidden />;
   if (job.status === 'cancelled') return <StopIcon size={18} aria-hidden />;
@@ -42,7 +42,7 @@ function StatusIcon({ job }: { job: JobSnapshot }) {
 function JobRow({ job, onRetry, onContinue, onCancel, onFocus, onDismiss }: { job: JobSnapshot } & Omit<Props, 'jobs'>) {
   const [open, setOpen] = useState(false);
   const active = ACTIVE_STATUSES.includes(job.status);
-  const tone = job.awaitingUser || job.status === 'needs_attention' || job.status === 'login_required' ? 'warn' : job.status === 'ready' ? 'ok' : job.status === 'failed' ? 'error' : job.status === 'cancelled' ? 'muted' : 'busy';
+  const tone = job.awaitingUser || job.status === 'needs_attention' || job.status === 'login_required' ? 'warn' : job.status === 'ready' || job.status === 'published' ? 'ok' : job.status === 'failed' ? 'error' : job.status === 'cancelled' ? 'muted' : 'busy';
   const logo = job.moduleId === 'meta' ? 'facebook' : job.moduleId;
 
   return (
@@ -79,9 +79,9 @@ function JobRow({ job, onRetry, onContinue, onCancel, onFocus, onDismiss }: { jo
       )}
 
       <div className="job-actions">
-        {job.hasPage && (job.status === 'ready' || job.status === 'needs_attention') && (
+        {job.hasPage && (job.status === 'ready' || job.status === 'needs_attention' || job.status === 'published') && (
           <button type="button" className="btn primary small" onClick={() => onFocus(job.id)}>
-            <EyeIcon size={14} aria-hidden /> Review post
+            <EyeIcon size={14} aria-hidden /> {job.status === 'published' ? 'Show tab' : 'Review post'}
           </button>
         )}
         {(job.status === 'failed' || job.status === 'cancelled' || job.status === 'needs_attention') && (

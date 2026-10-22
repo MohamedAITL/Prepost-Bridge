@@ -70,8 +70,10 @@ export const YT = {
     item: 'ytd-channel-switcher-page-renderer ytd-account-item-renderer',
   },
 
-  /** Final submission controls; never clicked. */
+  /** Final submission control; pressed only with auto-publish on (PrepareContext.publishClick). */
   doneButton: 'ytcp-uploads-dialog #done-button',
+  /** Shown after Publish/Save: "Video published" share dialog, or "still processing". */
+  publishedDialog: ['ytcp-video-share-dialog', 'ytcp-uploads-still-processing-dialog'],
   forbidden: [
     '#done-button',
     'ytcp-uploads-dialog #done-button',

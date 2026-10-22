@@ -1,9 +1,10 @@
 import type { Page } from 'playwright';
 import type { JobCheck } from '../shared/jobs';
+import { publishClick } from '../server/automation/safeActions';
 import type { JobContent, PrepareContext } from '../server/platforms/types';
 
 /** Minimal PrepareContext for running platform modules against local fixture pages. */
-export function testContext(page: Page, content: JobContent) {
+export function testContext(page: Page, content: JobContent, allowPublish = false) {
   const checks: JobCheck[] = [];
   const statuses: string[] = [];
   const waits: string[] = [];
@@ -21,6 +22,7 @@ export function testContext(page: Page, content: JobContent) {
     snapshot: async () => undefined,
     showTab: async () => undefined,
     hideTab: async () => undefined,
+    publishClick: (locator, purpose) => publishClick(locator, purpose, allowPublish),
   };
   return { ctx, checks, statuses, waits };
 }

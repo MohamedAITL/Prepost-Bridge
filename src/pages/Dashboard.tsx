@@ -209,10 +209,20 @@ export function Dashboard() {
   const uploading = pending.some((p) => !p.error);
   const canPrepare = batchPlans.length > 0 && problems.length === 0 && !uploading && engine === 'up';
 
+  // Not remembered: every visit starts with Auto-publish off.
+  const [autoPublish, setAutoPublish] = useState(false);
+  const toggleAutoPublish = (on: boolean) => {
+    if (on && !window.confirm('Turn on Auto-publish?\n\nPrepost will press Post / Publish / Share on every selected platform as soon as each post passes all its checks. The posts go live without a final review by you.\n\nIf any check can\'t be confirmed, that post is left for you to publish yourself.')) return;
+    setAutoPublish(on);
+  };
+
   const prepare = () =>
     run(async () => {
       setNotice(null);
-      await api.prepareBatch(posts.map(({ id, title, draft: d }) => ({ id, title, draft: d })));
+      await api.prepareBatch(
+        posts.map(({ id, title, draft: d }) => ({ id, title, draft: d })),
+        autoPublish,
+      );
       document.getElementById('progress')?.scrollIntoView({ behavior: 'smooth' });
     });
 
@@ -385,10 +395,18 @@ export function Dashboard() {
             </ul>
           </div>
         )}
-        <button type="button" className="btn primary large" disabled={!canPrepare} onClick={prepare}>
-          <PaperPlaneTiltIcon size={18} weight="bold" aria-hidden />
-          {activePostCount > 1 ? `Prepare all posts (${activePostCount})` : 'Prepare posts'}
-        </button>
+        <div className="action-go">
+          <label className={`publish-switch${autoPublish ? ' is-on' : ''}`} title="Press Post / Publish / Share automatically when every check passes">
+            <input type="checkbox" role="switch" className="switch" checked={autoPublish} onChange={(e) => toggleAutoPublish(e.target.checked)} />
+            <span>Auto-publish{autoPublish ? ' ON' : ''}</span>
+          </label>
+          <button type="button" className={`btn primary large${autoPublish ? ' publish' : ''}`} disabled={!canPrepare} onClick={prepare}>
+            <PaperPlaneTiltIcon size={18} weight="bold" aria-hidden />
+            {autoPublish
+              ? activePostCount > 1 ? `Prepare & publish all (${activePostCount})` : 'Prepare & publish'
+              : activePostCount > 1 ? `Prepare all posts (${activePostCount})` : 'Prepare posts'}
+          </button>
+        </div>
       </div>
 
       <section className="card progress" id="progress" aria-labelledby="progress-title">
@@ -416,7 +434,11 @@ export function Dashboard() {
         />
       </section>
 
-      <footer className="footnote">Prepost never publishes. Each post waits in its tab until you review it and press the platform's own Publish button.</footer>
+      <footer className="footnote">
+        {autoPublish
+          ? 'Auto-publish is on: each post is published as soon as all its checks pass. Posts with an unconfirmed check wait in their tab for you.'
+          : "Prepost doesn't publish unless you turn on Auto-publish. Each post waits in its tab until you review it and press the platform's own Publish button."}
+      </footer>
     </div>
   );
 }

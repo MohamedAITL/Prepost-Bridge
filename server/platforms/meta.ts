@@ -439,6 +439,22 @@ export const metaModule: PlatformModule = {
     await ctx.hideTab();
 
     const publish = await observeOnly(page.getByRole('button', { name: META.publishButton }));
-    ctx.check(`${reel ? 'Reel' : 'Composer'} ready; Share/Publish left for you (not clicked)`, publish.visible ? 'pass' : 'unverified');
+    ctx.check(`${reel ? 'Reel' : 'Composer'} ready`, publish.visible ? 'pass' : 'unverified');
+  },
+
+  async publish(ctx) {
+    const { page } = ctx;
+    // Publish (posts) or Share (Reels), never Schedule. The footer button is the last match.
+    const button = page.getByRole('button', { name: META.finalButton }).filter({ visible: true }).last();
+    const start = page.url();
+    await ctx.publishClick(button, 'Publish');
+    // Business Suite leaves the composer once it accepted the post.
+    const done = await pollUntil(async () => {
+      const err = await visibleText(page, META.mediaErrors);
+      if (err) throw new Error(`Meta reported: ${err}`);
+      return (page.url() !== start && !/composer/.test(page.url())) || !!(await visibleText(page, META.publishedText));
+    }, 180_000, 1500);
+    if (!done) throw new Error('Meta did not confirm: the composer is still open.');
+    ctx.check('Published on Meta', 'pass');
   },
 };

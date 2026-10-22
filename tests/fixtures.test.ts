@@ -75,6 +75,28 @@ test('X module fills text (Arabic + emoji + newlines), attaches images, never cl
   await context.close();
 });
 
+test('auto-publish: refused when off; when on, X presses Post and confirms it left the composer', async () => {
+  const context = await browser.newContext();
+  // Pressing Post on the mock sends you Home, like X does.
+  const fixture = X_FIXTURE.replace('window.published = true;', "window.published = true; location.href = 'https://x.com/home';");
+  await context.route('https://x.com/**', (route) => route.fulfill({ contentType: 'text/html', body: fixture }));
+  const page = await context.newPage();
+  const content = { targets: ['x' as const], text: 'Hello', media: [] };
+
+  const off = testContext(page, content, false);
+  await xModule.prepare(off.ctx);
+  await assert.rejects(xModule.publish(off.ctx), /auto-publish is off/);
+  assert.equal(await page.evaluate(() => (window as unknown as { published: boolean }).published), false);
+  assert.ok(page.url().includes('/compose/'));
+
+  const on = testContext(page, content, true);
+  await xModule.prepare(on.ctx);
+  await xModule.publish(on.ctx);
+  assert.ok(page.url().endsWith('/home'), page.url());
+  assert.ok(on.checks.some((c) => c.label === 'Posted on X' && c.state === 'pass'));
+  await context.close();
+});
+
 const YT_FIXTURE = `<!doctype html><meta charset="utf-8">
 <ytcp-app></ytcp-app>
 <ytcp-uploads-dialog>

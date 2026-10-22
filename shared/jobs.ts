@@ -8,12 +8,14 @@ export type JobStatus =
   | 'uploading'
   | 'filling'
   | 'verifying'
+  | 'publishing'
   | 'ready'
+  | 'published'
   | 'needs_attention'
   | 'failed'
   | 'cancelled';
 
-// Deliberately no "published" state: this application never publishes.
+// "publishing"/"published" happen only when the user switched auto-publish on for that batch.
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   waiting: 'Waiting',
   opening: 'Opening platform',
@@ -22,13 +24,15 @@ export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   uploading: 'Uploading media',
   filling: 'Filling fields',
   verifying: 'Verifying content',
+  publishing: 'Publishing',
   ready: 'Ready for manual review',
+  published: 'Published',
   needs_attention: 'Needs attention',
   failed: 'Failed',
   cancelled: 'Cancelled',
 };
 
-export const ACTIVE_STATUSES: JobStatus[] = ['waiting', 'opening', 'login_required', 'preparing', 'uploading', 'filling', 'verifying'];
+export const ACTIVE_STATUSES: JobStatus[] = ['waiting', 'opening', 'login_required', 'preparing', 'uploading', 'filling', 'verifying', 'publishing'];
 
 export interface JobCheck {
   label: string;

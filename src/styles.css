@@ -577,6 +577,41 @@ select.input {
   transform: translateX(16px);
 }
 
+/* Auto-publish: red when on, so it's never on by accident. */
+.action-go {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.publish-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted, inherit);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.publish-switch .switch {
+  margin: 0;
+}
+.publish-switch.is-on {
+  color: var(--danger);
+}
+.publish-switch.is-on .switch:checked {
+  background: var(--danger);
+}
+.btn.primary.publish {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+@media (max-width: 720px) {
+  .action-go {
+    justify-content: space-between;
+  }
+}
+
 /* ---------- media ---------- */
 .dropzone {
   display: flex;

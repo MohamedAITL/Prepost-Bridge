@@ -22,7 +22,9 @@ export const X = {
   uploadProgress: ['[data-testid="attachments"] [role="progressbar"]'],
   mediaErrors: [/could(n't| not) be uploaded/i, /some of your media failed/i, /n'a pas pu être (téléchargé|importé)/i, /تعذر تحميل/],
 
-  /** Final submission control. Observed (read-only) to confirm the composer is ready; never clicked. */
+  /** Toasts after pressing Post that mean it was NOT sent. */
+  postErrors: [/already said that|something went wrong/i, /vous l['’]avez déjà dit|un problème est survenu/i, /سبق أن قلت|حدث خطأ/],
+  /** Final submission control. Pressed only with auto-publish on (PrepareContext.publishClick). */
   postButton: '[data-testid="tweetButton"], [data-testid="tweetButtonInline"]',
   forbidden: ['[data-testid="tweetButton"]', '[data-testid="tweetButtonInline"]', '[data-testid="scheduleOption"]'],
 };

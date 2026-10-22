@@ -1,4 +1,4 @@
-import { fieldContains, findVisible, pollUntil, requireAttached, requireVisible, setFiles, visibleText, fillTextField, openUrl } from '../automation/helpers';
+import { fieldContains, findVisible, pollUntil, readFieldText, requireAttached, requireVisible, setFiles, visibleText, fillTextField, openUrl } from '../automation/helpers';
 import { observeOnly } from '../automation/safeActions';
 import { detectSessionWith, openWithSession } from '../automation/session';
 import { X } from './selectors/x';
@@ -58,6 +58,23 @@ export const xModule: PlatformModule = {
       ctx.check('Post text matches', ok ? 'pass' : 'fail', ok ? undefined : 'The composer text differs from your text.');
     }
     const post = await observeOnly(page.locator(X.postButton));
-    ctx.check('Composer open with Post button (not clicked)', post.visible ? 'pass' : 'unverified', post.visible && !post.enabled ? 'Post button is disabled; X may consider the post invalid (e.g. too long).' : undefined);
+    ctx.check('Composer open with Post button', post.visible ? 'pass' : 'unverified', post.visible && !post.enabled ? 'Post button is disabled; X may consider the post invalid (e.g. too long).' : undefined);
+  },
+
+  async publish(ctx) {
+    const { page } = ctx;
+    const inDialog = page.url().includes('/compose/');
+    const box = await findVisible(page, X.textbox, 5000);
+    await ctx.publishClick(page.locator(X.postButton).filter({ visible: true }), 'Post');
+    // The compose dialog leaves /compose/post once sent; the inline composer on Home empties instead.
+    const sent = await pollUntil(async () => {
+      const emptied = !!box && !(await readFieldText(box).catch(() => 'x')).trim() && (await page.locator(X.attachmentMedia).count()) === 0;
+      if (inDialog ? !page.url().includes('/compose/') : emptied) return true;
+      const err = await visibleText(page, [...X.mediaErrors, ...X.postErrors]);
+      if (err) throw new Error(`X reported: ${err}`);
+      return false;
+    }, 60_000, 1000);
+    if (!sent) throw new Error('X did not confirm the post: the composer is still open.');
+    ctx.check('Posted on X', 'pass');
   },
 };

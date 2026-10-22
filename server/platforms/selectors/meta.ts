@@ -53,7 +53,11 @@ export const META = {
   mediaPreview: 'img[src^="blob:"], video[src^="blob:"]',
   mediaErrors: [/couldn't upload|upload failed|isn't supported|not supported/i, /impossible d['’]importer|n['’]est pas pris en charge/i, /تعذر التحميل|غير مدعوم/],
 
-  /** Final submission controls; observed only, never clicked. */
+  /** The button auto-publish presses: Publish (posts) / Share (Reels). Never Schedule. */
+  finalButton: /^(publish|publish now|share|share now|publier|publier maintenant|partager|partager maintenant|نشر|نشر الآن|مشاركة|شارك الآن)$/i,
+  /** Confirmation toasts after Publish/Share. */
+  publishedText: [/(post|reel) (was |has been )?(published|shared)|your (post|reel) is (live|being published)/i, /(publication|reel) (a été )?(publiée|partagée)|votre (publication|reel) est en ligne/i, /تم نشر|تمت مشاركة/],
+  /** Final submission controls; observed in prepare, pressed only by publish() with auto-publish on. */
   publishButton: /^(publish|schedule|share|share now|publier|partager|programmer|نشر|مشاركة|جدولة)$/i,
   forbidden: ['[aria-label="Publish"]', '[aria-label="Schedule"]', '[aria-label="Publier"]', '[aria-label="Programmer"]', '[aria-label="نشر"]'],
 };

@@ -110,6 +110,29 @@ export const tiktokStudioModule: PlatformModule = {
     if (content.text) ctx.check('Caption matches', (await fieldContains(caption, content.text)) ? 'pass' : 'fail');
     ctx.check('Media preview visible', (await findVisible(page, TT.preview, 5000)) ? 'pass' : 'unverified');
     const post = await observeOnly(page.locator(TT.postButton));
-    ctx.check('Post button present (not clicked)', post.visible ? 'pass' : 'unverified');
+    ctx.check('Post button present', post.visible ? 'pass' : 'unverified');
+  },
+
+  async publish(ctx) {
+    const { page } = ctx;
+    // Prefer TikTok's own test id; the text fallback could also match other "Post…" buttons.
+    const byId = page.locator('[data-e2e="post_video_button"]').filter({ visible: true });
+    await ctx.publishClick((await byId.count()) ? byId : page.locator(TT.postButton).filter({ visible: true }), 'Post');
+    let confirmed = false;
+    const done = await pollUntil(async () => {
+      const failed = await visibleText(page, TT.uploadFailed);
+      if (failed) throw new Error(`TikTok reported: ${failed}`);
+      // "Content checks aren't finished. Post now?" asks to confirm once.
+      const postNow = page.getByRole('button', { name: TT.postNow }).filter({ visible: true });
+      if (!confirmed && (await postNow.count())) {
+        confirmed = true;
+        await ctx.publishClick(postNow, 'Post now');
+        return null;
+      }
+      // Studio leaves the upload page (to Manage posts) once the post is accepted.
+      return !page.url().includes('/upload') || !!(await visibleText(page, TT.postedText));
+    }, 120_000, 1500);
+    if (!done) throw new Error('TikTok did not confirm the post: still on the upload page.');
+    ctx.check('Posted on TikTok', 'pass');
   },
 };

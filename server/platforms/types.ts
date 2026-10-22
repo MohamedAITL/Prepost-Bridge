@@ -1,4 +1,4 @@
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import type { JobCheck, JobStatus } from '../../shared/jobs';
 import type { DestinationId, MediaItem, ModuleId, YouTubeOptions } from '../../shared/types';
 
@@ -45,6 +45,8 @@ export interface PrepareContext {
   /** Save the page outline locally for troubleshooting (no cookies, best effort). */
   snapshot(label: string): Promise<void>;
   throwIfCancelled(): void;
+  /** Press the final Post/Publish/Share button. Refuses unless auto-publish is on for this job. */
+  publishClick(locator: Locator, purpose: string): Promise<void>;
 }
 
 export interface PlatformModule {
@@ -56,4 +58,9 @@ export interface PlatformModule {
   detectSession(page: Page): Promise<SessionState>;
   /** Fill the composer and stop before any final submission. */
   prepare(ctx: PrepareContext): Promise<void>;
+  /**
+   * Auto-publish only, after prepare() with every check passed: press the final button and confirm
+   * the platform accepted it. Throws if it can't confirm.
+   */
+  publish(ctx: PrepareContext): Promise<void>;
 }

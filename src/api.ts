@@ -116,7 +116,8 @@ export const api = {
   eventsUrl: () => u('/api/events'),
   health: () => request<{ ok: boolean }>('GET', '/api/health'),
 
-  prepareBatch: (posts: BatchPost[]) => request<{ jobs: JobSnapshot[] }>('POST', '/api/prepare', { posts }),
+  /** `publish` = the Auto-publish switch: the engine presses Post/Publish/Share once every check passes. */
+  prepareBatch: (posts: BatchPost[], publish = false) => request<{ jobs: JobSnapshot[] }>('POST', '/api/prepare', { posts, publish }),
   retry: (id: string) => request<JobSnapshot>('POST', `/api/jobs/${id}/retry`),
   continueJob: (id: string) => request('POST', `/api/jobs/${id}/continue`),
   cancel: (id: string) => request('POST', `/api/jobs/${id}/cancel`),

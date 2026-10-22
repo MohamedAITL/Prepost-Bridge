@@ -124,9 +124,10 @@ app.delete(
 
 // ---------- automation ----------
 app.post('/api/prepare', (req, res) => {
-  // New shape: { posts: [{ id, title, draft }] }. Old shape: { draft } (a single post).
+  // New shape: { posts: [{ id, title, draft }], publish? }. Old shape: { draft } (a single post).
+  // Auto-publish only on an explicit boolean true from the dashboard's switch.
   if (req.body?.posts) {
-    res.json({ jobs: automationManager.prepareBatch(parseBatch(req.body.posts)) });
+    res.json({ jobs: automationManager.prepareBatch(parseBatch(req.body.posts), req.body.publish === true) });
   } else {
     res.json({ jobs: automationManager.prepare(parseDraft(req.body?.draft)) });
   }

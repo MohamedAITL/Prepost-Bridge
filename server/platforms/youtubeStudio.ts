@@ -207,7 +207,46 @@ async function preparePost(ctx: PrepareContext) {
   ctx.setStatus('verifying', 'Verifying the post…', 90);
   if (content.text) ctx.check('Post text matches', (await fieldContains(box, content.text)) ? 'pass' : 'fail');
   const publish = await observeOnly(page.locator(P.submitButton));
-  ctx.check('Post composer open; Publish left for you (not clicked)', publish.visible ? 'pass' : 'unverified');
+  ctx.check('Post composer open', publish.visible ? 'pass' : 'unverified');
+}
+
+/** Auto-publish, channel post: press Post, then wait for the composer to empty. */
+async function publishPost(ctx: PrepareContext) {
+  const { page } = ctx;
+  const P = YT.post;
+  await ctx.publishClick(page.locator(P.submitButton), 'Post');
+  const done = await pollUntil(async () => {
+    const box = await findVisible(page, P.textbox, 0);
+    return !box || !(await readFieldText(box).catch(() => 'x')).trim();
+  }, 60_000, 1000);
+  if (!done) throw new Error('YouTube did not confirm the post: the composer still holds the text.');
+  ctx.check('Posted on YouTube', 'pass');
+}
+
+/** Auto-publish, video: go to the Visibility step, choose the visibility (Public by default), press Publish/Save. */
+async function publishVideo(ctx: PrepareContext) {
+  const { page, content } = ctx;
+  for (let i = 0; i < 3 && !(await findVisible(page, YT.visibilityStep, 0)); i++) {
+    await safeClick(page.locator(YT.nextButton), 'Next', { forbiddenSelectors: YT.forbidden });
+    const e = await dialogError(page);
+    if (e) throw new Error(`YouTube blocked the next step: ${e}`);
+    await findVisible(page, YT.visibilityStep, 5000);
+  }
+  if (!(await findVisible(page, YT.visibilityStep, 20_000))) throw new Error('Could not reach the Visibility step.');
+  const want = content.youtube!.visibility;
+  const vis = want === 'unset' ? 'public' : want;
+  const sel = YT.visibility[vis];
+  if (!(await isChecked(page, sel))) await safeClick(page.locator(sel), `Visibility: ${vis}`, { forbiddenSelectors: YT.forbidden });
+  if (!(await isChecked(page, sel))) throw new Error(`Could not select "${vis}" visibility.`);
+  await ctx.publishClick(page.locator(YT.doneButton), vis === 'public' ? 'Publish' : 'Save');
+  // Studio swaps the upload dialog for "Video published"/"Video saved" (or closes it).
+  const done = await pollUntil(async () => {
+    const e = await dialogError(page);
+    if (e) throw new Error(`YouTube reported: ${e}`);
+    return !!(await findVisible(page, YT.publishedDialog, 0)) || !(await findVisible(page, [YT.doneButton], 0));
+  }, 90_000, 1000);
+  if (!done) throw new Error('YouTube did not confirm: the upload dialog is still open.');
+  ctx.check(`Video ${vis === 'public' ? 'published' : `saved as ${vis}`}`, 'pass');
 }
 
 export const youtubeStudioModule: PlatformModule = {
@@ -339,6 +378,8 @@ export const youtubeStudioModule: PlatformModule = {
 
     ctx.setStatus('verifying', 'Final check…', 95);
     const done = await observeOnly(page.locator(YT.doneButton));
-    ctx.check('Upload dialog open; Save/Publish left for you (not clicked)', done.visible ? 'pass' : 'unverified');
+    ctx.check('Upload dialog open', done.visible ? 'pass' : 'unverified');
   },
+
+  publish: (ctx) => (ctx.content.youtube!.postType === 'post' ? publishPost(ctx) : publishVideo(ctx)),
 };

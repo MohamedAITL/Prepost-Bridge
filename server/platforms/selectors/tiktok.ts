@@ -47,7 +47,11 @@ export const TT = {
   /** Generic blocking dialogs that need a human decision. */
   modal: ['div[role="dialog"]:not([aria-hidden="true"])', '.TUXModal'],
 
-  /** Final submission controls; observed only, never clicked. */
+  /** Confirmation when content checks are still running. */
+  postNow: /^(post now|publier maintenant|انشر الآن|النشر الآن)$/i,
+  /** Shown once TikTok accepted the post. */
+  postedText: [/your (video|post) (has been|is being) (posted|published|uploaded)|video posted|post published/i, /vidéo (publiée|a été publiée)|publication réussie/i, /تم نشر|تم النشر/],
+  /** Final submission controls; pressed only with auto-publish on (PrepareContext.publishClick). */
   postButton: '[data-e2e="post_video_button"], button:has-text("Post")',
   forbidden: ['[data-e2e="post_video_button"]', '[data-e2e="schedule_video_button"]', '[data-e2e="save_draft_button"]'],
 };

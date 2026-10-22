@@ -6,7 +6,7 @@ import { DESTINATION_LABELS, MODULE_LABELS, type BatchPost, type Draft, type Met
 import { batchProblems, buildDestinationContent, hasErrors, planBatch, planJobs, type JobPlan, type PostProblem } from '../../shared/validation';
 import { browserManager } from '../browser/browserManager';
 import { StepError } from '../automation/helpers';
-import { SafetyError } from '../automation/safeActions';
+import { publishClick, SafetyError } from '../automation/safeActions';
 import { metaModule, readMetaPages } from '../platforms/meta';
 import { tiktokStudioModule } from '../platforms/tiktokStudio';
 import type { JobContent, PlatformModule, PrepareContext, WaitForUserOptions } from '../platforms/types';
@@ -78,6 +78,8 @@ interface Job {
   cancelled: boolean;
   resume: (() => void) | null;
   abortWait: ((e: Error) => void) | null;
+  /** The user switched auto-publish on for this batch: press the final button once every check passes. */
+  publish: boolean;
 }
 
 /**
@@ -164,8 +166,8 @@ class AutomationManager extends EventEmitter {
     return this.prepareBatch([{ id: 'single', title: '', draft }]);
   }
 
-  /** Several independent posts, each prepared on its own platforms. */
-  prepareBatch(posts: BatchPost[]): JobSnapshot[] {
+  /** Several independent posts, each prepared on its own platforms; `publish` = auto-publish switched on. */
+  prepareBatch(posts: BatchPost[], publish = false): JobSnapshot[] {
     const plans = planBatch(posts);
     if (plans.length === 0) throw new BatchFailure([{ postId: 'all', title: 'All', messages: ['Select at least one destination in a post.'] }]);
 
@@ -193,7 +195,7 @@ class AutomationManager extends EventEmitter {
       if (plans.some((p) => samePlan(p, job.plan))) this.jobs.delete(id);
     }
 
-    const created = plans.map((plan) => this.createJob(plan, byId.get(plan.postId!)!.draft));
+    const created = plans.map((plan) => this.createJob(plan, byId.get(plan.postId!)!.draft, publish));
     this.emitChange();
     this.pump();
     return created.map((j) => j.snap);
@@ -237,7 +239,7 @@ class AutomationManager extends EventEmitter {
     }
   }
 
-  private createJob(plan: JobPlan, draft: Draft): Job {
+  private createJob(plan: JobPlan, draft: Draft, publish: boolean): Job {
     const label = planLabel(plan, draft);
     const now = Date.now();
     const job: Job = {
@@ -251,6 +253,7 @@ class AutomationManager extends EventEmitter {
       cancelled: false,
       resume: null,
       abortWait: null,
+      publish,
       snap: {
         id: crypto.randomUUID(),
         moduleId: plan.moduleId,
@@ -323,6 +326,11 @@ class AutomationManager extends EventEmitter {
       snapshot: (label: string) => this.saveDiagnostics(job, label),
       showTab: (reason: string) => this.showTab(job, page, reason),
       hideTab: () => this.hideTab(job),
+      publishClick: (locator, purpose) => {
+        throwIfCancelled();
+        this.jobLog(job, `Pressing "${purpose}" (auto-publish is on)`, 'warn');
+        return publishClick(locator, purpose, job.publish);
+      },
     };
   }
 
@@ -416,11 +424,20 @@ class AutomationManager extends EventEmitter {
         if (ACTIVE_STATUSES.includes(job.snap.status) || job.snap.awaitingUser) job.abortWait?.(new Error('The browser tab was closed.'));
       });
       this.jobLog(job, `Preparing ${job.snap.label}: ${content.media.length} media file(s), ${content.text.length} characters of text`);
-      await mod.prepare(this.makeContext(job, page, content));
+      const ctx = this.makeContext(job, page, content);
+      await mod.prepare(ctx);
 
       const failed = job.snap.checks.filter((c) => c.state === 'fail');
       const unverified = job.snap.checks.filter((c) => c.state === 'unverified');
-      if (failed.length) {
+      if (job.publish && !failed.length && !unverified.length) {
+        // Auto-publish: only when every check passed.
+        ctx.setStatus('publishing', 'Publishing…', 97);
+        await ctx.step('Publish', () => mod.publish(ctx));
+        this.update(job, { status: 'published', progress: 100, currentStep: null, message: 'Published. Open the tab to see it on the platform.' });
+      } else if (job.publish) {
+        const why = [...failed, ...unverified].map((c) => c.label).join('; ');
+        this.update(job, { status: 'needs_attention', progress: 100, currentStep: null, message: `Not published automatically: ${why} could not be confirmed. Check the post and publish it yourself.` });
+      } else if (failed.length) {
         this.update(job, { status: 'needs_attention', progress: 100, currentStep: null, message: `Prepared, but some checks failed: ${failed.map((c) => c.label).join('; ')}. Review the post carefully.` });
       } else {
         this.update(job, {
@@ -449,6 +466,7 @@ class AutomationManager extends EventEmitter {
       }
       await this.saveDiagnostics(job);
       if (err instanceof SafetyError) message = `Safety stop: ${err.message}`;
+      if (step === 'Publish') message = `${message} The post may already be live: check the platform before publishing again.`;
       if (/setFileInputFiles|Not allowed to read local|file access/i.test(err.message)) {
         message = 'The browser refused to hand the file to the page. Open the extensions page (chrome://extensions or edge://extensions), open Prepost Bridge → Details, turn on "Allow access to file URLs", then press Retry.';
       }
@@ -479,8 +497,9 @@ class AutomationManager extends EventEmitter {
     if (!old) throw new Error('Unknown job.');
     if (ACTIVE_STATUSES.includes(old.snap.status)) throw new Error('This job is still running.');
     this.jobs.delete(id);
-    // The retry runs in the same platform tab (it's reused, not closed).
-    const job = this.createJob(old.plan, old.draft);
+    // The retry runs in the same platform tab (it's reused, not closed). It never auto-publishes:
+    // a failed publish may still have gone live, so a second press could post twice.
+    const job = this.createJob(old.plan, old.draft, false);
     this.emitChange();
     this.pump();
     return job.snap;

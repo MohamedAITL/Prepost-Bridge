@@ -49,7 +49,7 @@ export function BridgeSetup({ browser }: { browser: BrowserState }) {
         </li>
       </ol>
       <p className="muted small">
-        While a post is being prepared, Chrome shows a “started debugging this browser” bar. That's Chrome's safety notice; leave it until the job finishes. The extension only works with tabs Prepost opens, and never presses Publish.
+        While a post is being prepared, Chrome shows a “started debugging this browser” bar. That's Chrome's safety notice; leave it until the job finishes. The extension only works with tabs Prepost opens, and presses Publish only when you turn on Auto-publish.
       </p>
     </section>
   );
