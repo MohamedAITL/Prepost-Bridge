@@ -9,6 +9,7 @@ import type { PlatformModule, PrepareContext } from './types';
 
 async function attachViaPicker(ctx: PrepareContext, page: Page, paths: string[]) {
   const chooser = page.waitForEvent('filechooser', { timeout: 20_000 });
+  chooser.catch(() => undefined); // if the clicks below fail, this must not become an unhandled rejection
   await safeClick(page.getByRole('button', { name: META.addMediaButton }), 'Add photo/video', { forbiddenSelectors: META.forbidden });
   const menuItem = page.getByRole('menuitem', { name: META.uploadFromComputer }).or(page.getByRole('button', { name: META.uploadFromComputer }));
   if (await menuItem.first().isVisible().catch(() => false)) {
@@ -35,6 +36,7 @@ async function setReelThumbnail(ctx: PrepareContext, page: Page, coverPath: stri
   await link.waitFor({ state: 'visible', timeout: 10_000 });
   const before = await countMediaPreviews(page);
   const chooser = page.waitForEvent('filechooser', { timeout: 15_000 });
+  chooser.catch(() => undefined);
   await safeClick(link, 'Upload thumbnail image', { forbiddenSelectors: META.forbidden });
   await (await chooser).setFiles(coverPath);
   // Some versions open a crop/preview dialog with its own Save.

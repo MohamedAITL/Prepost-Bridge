@@ -349,6 +349,9 @@ async function main() {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  // A stray browser-automation rejection (e.g. a tab closed mid-wait) must fail one job, not
+  // kill the engine and every other job with it.
+  process.on('unhandledRejection', (e) => logger.error('server', `Unhandled error (engine kept running): ${(e as Error)?.message ?? e}`));
 }
 
 void main();

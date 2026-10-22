@@ -296,6 +296,7 @@ class BrowserManager extends EventEmitter {
       const cdp = await this.browser.newBrowserCDPSession();
       try {
         const created = ctx.waitForEvent('page', { timeout: 15_000 });
+        created.catch(() => undefined);
         await cdp.send('Target.createTarget', { url: 'about:blank', background: true });
         page = await created;
       } finally {
