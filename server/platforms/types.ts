@@ -37,8 +37,9 @@ export interface PrepareContext {
   step<T>(name: string, fn: () => Promise<T>): Promise<T>;
   waitForUser(message: string, opts?: WaitForUserOptions): Promise<void>;
   /**
-   * Show this tab while a video uploads (Chrome pauses that work in hidden tabs). Uploads take
-   * turns; hideTab() (or the end of the job) gives the user their previous tab back.
+   * Ask to show this tab while a video uploads (Chrome slows that work in hidden tabs). Returns at
+   * once: uploads take turns at being shown, and the job carries on meanwhile. hideTab() (or the end
+   * of the job) gives the user their previous tab back, or cancels a request still waiting its turn.
    */
   showTab(reason: string): Promise<void>;
   hideTab(): Promise<void>;

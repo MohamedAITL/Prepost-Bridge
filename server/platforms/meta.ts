@@ -81,6 +81,14 @@ async function setReelThumbnail(ctx: PrepareContext, page: Page, coverPath: stri
 }
 
 /**
+ * Which Reel step is showing, as its visible section headings ("Post to", "Thumbnail"… on Create;
+ * "Scheduling options"… on Share). The page title stays "Create reel" on every step.
+ */
+async function reelStepSignature(page: Page): Promise<string> {
+  return (await page.getByRole('heading', { level: 3 }).filter({ visible: true }).allInnerTexts().catch(() => [])).join('|');
+}
+
+/**
  * Reel composer: click "Next" through Create → Edit → Share, stopping when the final Share/Publish
  * button is showing. Never clicks that button.
  */
@@ -102,18 +110,25 @@ async function advanceReel(ctx: PrepareContext, page: Page) {
       }
     }
     ctx.setStatus('preparing', `Reel: moving to the next step (${i + 1})…`, 92);
-    const heading = await page.getByRole('heading', { level: 1 }).first().innerText().catch(() => '');
+    const before = await reelStepSignature(page);
     await ctx.step(`Click Next (${i + 1})`, () => safeClick(next, 'Next', { forbiddenSelectors: META.forbidden }));
-    // Wait for the step to change: the final button appears, or the page moves on.
-    await pollUntil(
-      async () => (await observeOnly(finalButton)).visible || (await page.getByRole('heading', { level: 1 }).first().innerText().catch(() => '')) !== heading || !(await observeOnly(next)).enabled,
-      15_000,
-      500,
-    );
+    // Wait for the step to change: the final button appears, or the step's sections change.
+    await pollUntil(async () => (await observeOnly(finalButton)).visible || (await reelStepSignature(page)) !== before, 15_000, 300);
   }
   const reached = (await observeOnly(finalButton)).visible;
   ctx.check('Reel at the Share step', reached ? 'pass' : 'unverified', reached ? undefined : 'Check the remaining Reel steps in the tab.');
   if (!reached) await ctx.snapshot('meta-reel-step');
+}
+
+/**
+ * Meta's "published" confirmation. Only dialogs are searched: the caption itself (still on screen
+ * in the composer) could contain the same words.
+ */
+export async function publishedDialogShown(page: Page): Promise<boolean> {
+  for (const re of META.publishedText) {
+    if ((await page.getByRole('dialog').filter({ hasText: re }).filter({ visible: true }).count().catch(() => 0)) > 0) return true;
+  }
+  return false;
 }
 
 /** Visible images/videos big enough to be media previews (icons are excluded by size). */
@@ -432,11 +447,14 @@ export const metaModule: PlatformModule = {
       const expected = content.media.length;
       // Posts enable Publish once uploads finish; the Reel composer enables Next.
       const publish = reel ? page.getByRole('button', { name: META.nextButton }).filter({ visible: true }).last() : page.getByRole('button', { name: META.publishButton });
+      const reelFinal = page.getByRole('button', { name: META.finalButton }).filter({ visible: true });
       let enabledSince = 0;
       const result = await ctx.step('Wait for media processing', () =>
         pollUntil(async () => {
           const err = await visibleText(page, META.mediaErrors);
           if (err) throw new Error(`Meta reported: ${err}`);
+          // The Reel is already past the Create step (e.g. you pressed Next): its upload is done.
+          if (reel && (await reelFinal.count()) > 0) return 'advanced';
           const shown = (await countMediaPreviews(page)) - before;
           const busy = await uploadInProgress(page);
           const { enabled } = await observeOnly(publish);
@@ -451,6 +469,7 @@ export const metaModule: PlatformModule = {
         }, timeout, 1000),
       );
       if (result === 'counted') ctx.check(`Media added (${expected})`, 'pass');
+      else if (result === 'advanced') ctx.check(`Media added (${expected})`, 'pass', 'The Reel already moved past the upload step');
       else if (result === 'publish-enabled') ctx.check(`Media added (${expected})`, 'pass', `Upload finished (${reel ? 'Next' : 'Publish'} became available)`);
       else {
         ctx.check(`Media added (${expected})`, 'unverified', 'Could not confirm the upload finished; check the media in the composer.');
@@ -460,8 +479,10 @@ export const metaModule: PlatformModule = {
 
     ctx.setStatus('verifying', 'Verifying the composer…', 90);
     if (content.text) {
-      const current = (await findVisible(page, META.textbox, 5000)) ?? box!;
-      ctx.check('Post text matches', (await fieldContains(current, content.text)) ? 'pass' : 'fail');
+      // On a later Reel step the text box is off screen (or gone): that's "can't check", not a failure.
+      const current = await findVisible(page, META.textbox, 5000);
+      const ok = current ? await fieldContains(current, content.text).catch(() => null) : null;
+      ctx.check('Post text matches', ok === null ? 'unverified' : ok ? 'pass' : 'fail', ok === null ? 'The text box is no longer on screen; check the caption in the tab.' : undefined);
     }
 
     if (reel && content.thumbnail) await ctx.step('Set Reel thumbnail', () => setReelThumbnail(ctx, page, content.thumbnail!.path));
@@ -478,12 +499,13 @@ export const metaModule: PlatformModule = {
     const button = page.getByRole('button', { name: META.finalButton }).filter({ visible: true }).last();
     const start = page.url();
     await ctx.publishClick(button, 'Publish');
-    // Business Suite leaves the composer once it accepted the post.
+    // Business Suite confirms with a "Your post is published" dialog (or leaves the composer).
     const done = await pollUntil(async () => {
+      if ((page.url() !== start && !/composer/.test(page.url())) || (await publishedDialogShown(page))) return true;
       const err = await visibleText(page, META.mediaErrors);
       if (err) throw new Error(`Meta reported: ${err}`);
-      return (page.url() !== start && !/composer/.test(page.url())) || !!(await visibleText(page, META.publishedText));
-    }, 180_000, 1500);
+      return false;
+    }, 120_000, 1000);
     if (!done) throw new Error('Meta did not confirm: the composer is still open.');
     ctx.check('Published on Meta', 'pass');
   },

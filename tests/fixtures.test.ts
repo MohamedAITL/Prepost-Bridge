@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser } from 'playwright';
+import { metaModule, publishedDialogShown } from '../server/platforms/meta';
 import { xModule } from '../server/platforms/x';
 import { youtubeStudioModule } from '../server/platforms/youtubeStudio';
 import { testContext } from './harness';
@@ -94,6 +95,41 @@ test('auto-publish: refused when off; when on, X presses Post and confirms it le
   await xModule.publish(on.ctx);
   assert.ok(page.url().endsWith('/home'), page.url());
   assert.ok(on.checks.some((c) => c.label === 'Posted on X' && c.state === 'pass'));
+  await context.close();
+});
+
+test('Meta auto-publish: confirmed by the real "Your post is published" dialog, never by caption text', async () => {
+  const context = await browser.newContext();
+  // Seen 2026-10: Publish → "Publishing your post", then a dialog "Your post is published" (still on /composer).
+  const body = `<!doctype html><meta charset="utf-8">
+    <div role="combobox" contenteditable="true">تم نشر — Your post is published (caption text)</div>
+    <button>Publish</button>
+    <script>
+      document.querySelector('button').addEventListener('click', () => {
+        window.published = true;
+        document.body.insertAdjacentHTML('beforeend', '<h4>Publishing your post</h4>');
+        setTimeout(() => document.body.insertAdjacentHTML('beforeend', '<div role="dialog"><h1>Your post is published</h1><button>Close</button></div>'), 800);
+      });
+    </script>`;
+  await context.route('https://business.facebook.com/**', (route) => route.fulfill({ contentType: 'text/html', body }));
+  const page = await context.newPage();
+  await page.goto('https://business.facebook.com/latest/composer');
+  assert.equal(await publishedDialogShown(page), false, 'caption words alone must not count as published');
+
+  const { ctx, checks } = testContext(page, { targets: ['facebook' as const], text: 'x', media: [] }, true);
+  const started = Date.now();
+  await metaModule.publish(ctx);
+  assert.ok(Date.now() - started < 10_000, 'confirmed within seconds, not after the 2-minute limit');
+  assert.equal(await page.evaluate(() => (window as unknown as { published: boolean }).published), true);
+  assert.ok(checks.some((c) => c.label === 'Published on Meta' && c.state === 'pass'));
+  await context.close();
+});
+
+test('Meta Reel: the "Reel processing … will be published" dialog counts as accepted', async () => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.setContent('<div role="dialog"><h3>Reel processing</h3><p>Once your reel finishes processing, it will be published and you will be notified.</p></div>');
+  assert.equal(await publishedDialogShown(page), true);
   await context.close();
 });
 

@@ -239,7 +239,8 @@ class CdpRelay extends EventEmitter {
 
   /** Bring a tab (controlled or released) to the front. */
   async activate(tabId: number, opts: { focusWindow?: boolean } = {}) {
-    await this.callExtension({ type: 'activateTab', tabId, focusWindow: opts.focusWindow ?? true });
+    // Short timeout: uploads take turns at being shown, and a hung switch would block the next one.
+    await this.callExtension({ type: 'activateTab', tabId, focusWindow: opts.focusWindow ?? true }, 10_000);
   }
 
   /** The tab the user is looking at (in the last focused Chrome window). */

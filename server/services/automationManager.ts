@@ -80,6 +80,14 @@ interface Job {
   abortWait: ((e: Error) => void) | null;
   /** The user switched auto-publish on for this batch: press the final button once every check passes. */
   publish: boolean;
+  /** showTab() was asked for and hideTab() hasn't been called yet (the tab may still be waiting its turn). */
+  wantsForeground: boolean;
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const limit = new Promise<T>((_, reject) => (timer = setTimeout(() => reject(new Error('timed out')), ms)));
+  return Promise.race([p, limit]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -254,6 +262,7 @@ class AutomationManager extends EventEmitter {
       resume: null,
       abortWait: null,
       publish,
+      wantsForeground: false,
       snap: {
         id: crypto.randomUUID(),
         moduleId: plan.moduleId,
@@ -316,7 +325,10 @@ class AutomationManager extends EventEmitter {
         this.update(job, { currentStep: name });
         this.jobLog(job, `Step: ${name}`);
         try {
-          return await fn();
+          const result = await fn();
+          // Cleared so an error outside any step isn't blamed on the last step that succeeded.
+          if (job.snap.currentStep === name) this.update(job, { currentStep: null });
+          return result;
         } catch (e) {
           if (e instanceof StepError || e instanceof SafetyError || e instanceof CancelledError) throw e;
           throw new StepError(name, e);
@@ -337,33 +349,43 @@ class AutomationManager extends EventEmitter {
   /** Uploads take turns at being the visible tab. */
   private foregroundQueue: Promise<void> = Promise.resolve();
 
+  /**
+   * Ask for this job's tab to be shown while its upload runs. Doesn't hold the job up: the upload
+   * starts right away (the extension keeps hidden tabs awake) and the tab comes to the front when
+   * it's this job's turn. hideTab() before the turn arrives cancels the request.
+   */
   private async showTab(job: Job, page: Page, reason: string) {
-    if (job.foreground || page.isClosed()) return;
+    if (job.foreground || job.wantsForeground || page.isClosed()) return;
+    job.wantsForeground = true;
     let release!: () => void;
     const turn = this.foregroundQueue;
     this.foregroundQueue = new Promise<void>((r) => (release = r));
-    if (job.snap.status !== 'uploading' || !job.snap.message.startsWith('Waiting')) this.update(job, { message: 'Waiting for another upload to finish…' });
-    await turn;
-    if (job.cancelled) {
-      release();
-      return;
-    }
-    try {
-      const restore = await browserManager.showTab(page);
-      job.foreground = { restore, release };
-      this.jobLog(job, `Showing this tab while ${reason} (Chrome pauses uploads in hidden tabs)`);
-      this.update(job, { message: `Showing the tab while ${reason}…` });
-    } catch (e) {
-      release();
-      this.jobLog(job, `Could not show the tab: ${(e as Error).message}`, 'warn');
-    }
+    void (async () => {
+      await turn;
+      if (!job.wantsForeground || job.cancelled || page.isClosed()) return release();
+      try {
+        const restore = await browserManager.showTab(page);
+        if (!job.wantsForeground) {
+          // The upload finished while the tab was being shown.
+          await withTimeout(restore(), 10_000).catch(() => undefined);
+          return release();
+        }
+        job.foreground = { restore, release };
+        this.jobLog(job, `Showing this tab while ${reason} (Chrome pauses uploads in hidden tabs)`);
+      } catch (e) {
+        release();
+        this.jobLog(job, `Could not show the tab: ${(e as Error).message}`, 'warn');
+      }
+    })();
   }
 
   private async hideTab(job: Job) {
+    job.wantsForeground = false;
     const fg = job.foreground;
     if (!fg) return;
     job.foreground = null;
-    await fg.restore().catch(() => undefined);
+    // Bounded: a tab that can't be switched back must not hold up every later upload.
+    await withTimeout(fg.restore(), 10_000).catch(() => undefined);
     fg.release();
   }
 
