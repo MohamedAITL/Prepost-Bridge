@@ -34,11 +34,27 @@ const UPLOAD_SCRIPT = `async (image) => {
     const postId = document.querySelector('#post_ID') && document.querySelector('#post_ID').value;
     if (!nonce || !postId || !media || !media.featuredImage || !media.featuredImage.set) throw new Error('This editor does not offer image upload settings.');
     const bytes = Uint8Array.from(atob(image.data), (c) => c.charCodeAt(0));
+    let blob = new Blob([bytes], { type: image.type });
+    let name = image.name;
+    // Chouf's WordPress refuses WebP ("not permitted for security reasons"): send anything that
+    // isn't JPEG/PNG as a JPEG, converted here in the browser.
+    if (image.type !== 'image/jpeg' && image.type !== 'image/png') {
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const g = canvas.getContext('2d');
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      g.drawImage(bitmap, 0, 0);
+      blob = await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not convert the image to JPEG.'))), 'image/jpeg', 0.92));
+      name = name.replace(/\.[^.]+$/, '') + '.jpg';
+    }
     const form = new FormData();
     form.append('action', 'upload-attachment');
     form.append('_wpnonce', nonce);
     form.append('post_id', postId);
-    form.append('async-upload', new Blob([bytes], { type: image.type }), image.name);
+    form.append('async-upload', blob, name);
     const response = await fetch(new URL('admin-ajax.php', location.href), { method: 'POST', credentials: 'same-origin', body: form, signal: AbortSignal.timeout(90000) });
     const result = await response.json();
     if (!response.ok || !result.success || !result.data || !result.data.id) throw new Error((result.data && result.data.message) || 'WordPress refused the image.');

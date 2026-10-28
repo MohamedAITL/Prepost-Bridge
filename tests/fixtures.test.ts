@@ -22,6 +22,16 @@ before(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spa-test-'));
   fs.writeFileSync(path.join(tmp, 'a.png'), PNG);
   fs.writeFileSync(path.join(tmp, 'b.png'), PNG);
+  // A real WebP (Chouf's WordPress refuses WebP uploads), made by the browser.
+  const maker = await browser.newPage();
+  const webp = await maker.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 8;
+    c.getContext('2d')!.fillRect(0, 0, 4, 4);
+    return c.toDataURL('image/webp').split(',')[1];
+  });
+  await maker.close();
+  fs.writeFileSync(path.join(tmp, 'a.webp'), Buffer.from(webp, 'base64'));
   fs.writeFileSync(path.join(tmp, 'clip.mp4'), Buffer.from('000000186674797069736f6d0000020069736f6d69736f32', 'hex'));
 });
 
@@ -169,10 +179,12 @@ const WP_PUBLISHED = `<!doctype html><meta charset="utf-8"><div id="wpadminbar">
 test('WordPress module fills a Chouf article (title, body, Facebook title, tags, sections, featured image) and publishes only with auto-publish on', async () => {
   const context = await browser.newContext();
   let uploads = 0;
+  let uploaded = '';
   await context.route('https://0561102b93f7daa97.chouftv.ma/**', (route) => {
     const url = route.request().url();
     if (url.endsWith('/admin-ajax.php')) {
       uploads++;
+      uploaded = route.request().postDataBuffer()?.toString('latin1') ?? '';
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: { id: 77 } }) });
     }
     return route.fulfill({ contentType: 'text/html', body: url.includes('/post.php') ? WP_PUBLISHED : WP_NEW_POST });
@@ -182,7 +194,7 @@ test('WordPress module fills a Chouf article (title, body, Facebook title, tags,
     targets: ['wordpress' as const],
     title: 'عنوان الخبر',
     text: 'الفقرة الأولى <b>\nالفقرة الثانية',
-    media: [{ item: { id: '1', name: 'a.png', mime: 'image/png', size: PNG.length, kind: 'image' as const, source: 'upload' as const }, path: path.join(tmp, 'a.png') }],
+    media: [{ item: { id: '1', name: 'IMG_4164.webp', mime: 'image/webp', size: 100, kind: 'image' as const, source: 'upload' as const }, path: path.join(tmp, 'a.webp') }],
     wordpress: { postType: 'press' as const, tags: ['المغرب', 'شوف تيفي'], categories: ['سياسة'], options: ['يظهر في الصفحة الرئيسية', 'شريط الأخبار'], videoUrl: '' },
   };
 
@@ -198,6 +210,8 @@ test('WordPress module fills a Chouf article (title, body, Facebook title, tags,
   assert.equal(await page.getByLabel('شريط الأخبار', { exact: true }).isChecked(), true);
   assert.equal(await page.inputValue('#_thumbnail_id'), '77');
   assert.equal(uploads, 1);
+  assert.match(uploaded, /filename="IMG_4164\.jpg"\r\nContent-Type: image\/jpeg/, 'a WebP is sent to WordPress as a JPEG');
+  assert.match(uploaded, /\xff\xd8\xff/, 'the bytes really are a JPEG');
   assert.deepEqual(off.checks.filter((c) => c.state !== 'pass'), [], JSON.stringify(off.checks));
   assert.equal(await page.evaluate(() => (window as unknown as { published: boolean }).published), false, 'prepare never publishes');
   assert.deepEqual(off.articles, [{ title: 'عنوان الخبر', url: 'https://chouftv.ma/press/123.html', published: false }], 'the link is known before publishing');
