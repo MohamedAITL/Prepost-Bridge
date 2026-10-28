@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { FilmStripIcon } from '@phosphor-icons/react';
-import { buildDestinationContent, graphemeLength } from '../../shared/validation';
+import { buildDestinationContent, graphemeLength, wordpressArticle } from '../../shared/validation';
 import { YOUTUBE_TITLE_LIMIT } from '../../shared/rules';
 import { WORDPRESS_CHOICES, wordpressDefaults } from '../../shared/types';
 import { api } from '../api';
@@ -44,6 +44,8 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
   const setMeta = (patch: Partial<Draft['meta']>) => onDraftChange((x) => ({ ...x, meta: { ...x.meta, ...patch } }));
   const setWp = (patch: Partial<Draft['wordpress']>) => onDraftChange((x) => ({ ...x, wordpress: { ...x.wordpress, ...patch } }));
   const wp = draft.wordpress;
+  // What the News Desk format detects from the text (shown in the Title/Tags placeholders).
+  const wpArticle = d === 'wordpress' ? wordpressArticle(draft) : null;
   const wpChoices = WORDPRESS_CHOICES[wp.postType];
   const toggleWp = (key: 'options' | 'categories', name: string, on: boolean) =>
     setWp({ [key]: wpChoices[key].filter((x) => (x === name ? on : wp[key].includes(x))) });
@@ -105,19 +107,24 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
                   { value: 'program', label: 'Video' },
                 ]}
               />
-              {wp.postType === 'program' && <p className="muted small">The YouTube link goes in Link above; it fills the article's Video URL.</p>}
+              <p className="muted small">Write it like the News Desk: title on the first line, then the body, tags on the last line (comma-separated).</p>
+              {wp.postType === 'program' && (
+                <p className="muted small" dir="auto">
+                  {wpArticle?.videoUrl ? `Video URL: ${wpArticle.videoUrl}` : 'A YouTube link on any line of the text (or in Link) fills the Video URL.'}
+                </p>
+              )}
             </div>
             <div className="field">
               <label className="field-label" htmlFor="wp-title">
                 Title
               </label>
-              <input id="wp-title" className="input" dir="auto" placeholder="Empty = the first line of the text" value={wp.title} onChange={(e) => setWp({ title: e.target.value })} />
+              <input id="wp-title" className="input" dir="auto" placeholder={wpArticle?.title ? `From the text: ${wpArticle.title}` : 'Empty = the first line of the text'} value={wp.title} onChange={(e) => setWp({ title: e.target.value })} />
             </div>
             <div className="field">
               <label className="field-label" htmlFor="wp-tags">
                 Tags
               </label>
-              <input id="wp-tags" className="input" dir="auto" placeholder="المغرب، شوف تيفي" value={wp.tags} onChange={(e) => setWp({ tags: e.target.value })} />
+              <input id="wp-tags" className="input" dir="auto" placeholder={wpArticle?.tags.length ? `From the text: ${wpArticle.tags.join('، ')}` : 'Empty = the last line of the text'} value={wp.tags} onChange={(e) => setWp({ tags: e.target.value })} />
             </div>
             {(['options', 'categories'] as const).map((key) => (
               <fieldset key={key} className="field">

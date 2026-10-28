@@ -160,6 +160,7 @@ class AutomationManager extends EventEmitter {
       if (hasErrors(c)) throw new ValidationFailure([{ destination: planLabel(plan), messages: c.issues.filter((i) => i.level === 'error').map((i) => i.message) }]);
     }
     const resolve = (id: string) => ({ item: serverDraft.media.find((m) => m.id === id)!, path: mediaStore.get(id)!.filePath });
+    const article = plan.moduleId === 'wordpress' ? wordpressArticle(serverDraft) : null;
     return {
       targets: plan.targets,
       text: first.text,
@@ -168,10 +169,9 @@ class AutomationManager extends EventEmitter {
       thumbnail: first.thumbnail ? resolve(first.thumbnail.id) : null,
       youtube: plan.moduleId === 'youtube' ? draft.youtube : undefined,
       meta: plan.moduleId === 'meta' ? { confirmDestinations: draft.meta.confirmDestinations, videoAs: draft.meta.videoAs, page: plan.metaPage ?? '' } : undefined,
-      wordpress:
-        plan.moduleId === 'wordpress'
-          ? { postType: draft.wordpress.postType, tags: wordpressArticle(serverDraft).tags, categories: draft.wordpress.categories, options: draft.wordpress.options, videoUrl: draft.link.url.trim() }
-          : undefined,
+      wordpress: article
+        ? { postType: draft.wordpress.postType, tags: article.tags, categories: draft.wordpress.categories, options: draft.wordpress.options, videoUrl: article.videoUrl }
+        : undefined,
     };
   }
 

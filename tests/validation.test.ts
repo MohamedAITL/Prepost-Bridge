@@ -236,7 +236,7 @@ test('WordPress: title from the first line, "شوف تيفي" byline dropped, ta
     x.wordpress.tags = 'المغرب، شوف تيفي, أخبار';
     x.link = { url: 'https://example.com/a', mode: 'append' };
   });
-  assert.deepEqual(wordpressArticle(d), { title: 'عنوان الخبر', body: 'الفقرة الأولى\nالفقرة الثانية', tags: ['المغرب', 'شوف تيفي', 'أخبار'] });
+  assert.deepEqual(wordpressArticle(d), { title: 'عنوان الخبر', body: 'الفقرة الأولى\nالفقرة الثانية', tags: ['المغرب', 'شوف تيفي', 'أخبار'], videoUrl: '' });
   const c = buildDestinationContent(d, 'wordpress');
   assert.equal(c.title, 'عنوان الخبر');
   assert.equal(c.text, 'الفقرة الأولى\nالفقرة الثانية', 'the link is never appended to an article');
@@ -254,7 +254,7 @@ test('WordPress: needs a title, body and tags; one image ≤ 4 MB; no video; a v
   });
   const errs = errors(d, 'wordpress');
   assert.ok(errs.some((m) => /article body/.test(m)));
-  assert.ok(errs.some((m) => /at least one tag/.test(m)));
+  assert.ok(errs.some((m) => /needs tags/.test(m)));
   assert.ok(!errs.some((m) => /^Nothing to post/.test(m)));
   d.sharedText = 'Title\nBody';
   d.wordpress.tags = 'a';
@@ -271,4 +271,26 @@ test('WordPress: needs a title, body and tags; one image ≤ 4 MB; no video; a v
   assert.deepEqual(errors(d, 'wordpress'), []);
   d.wordpress.categories = ['سياسة'];
   assert.ok(errors(d, 'wordpress').some((m) => /Not a WordPress choice/.test(m)), 'a news section on a video article');
+});
+
+test('WordPress detects title, body and tags like the News Desk (tags on the last line; YouTube link on any line for a video)', () => {
+  const d = draftWith((x) => {
+    x.sharedText = 'العنوان\nشوف تيفي\n\nنص الخبر\nسطر آخر\nالمغرب،شوف تيفي, أخبار';
+    x.platforms.wordpress.enabled = true;
+  });
+  assert.deepEqual(wordpressArticle(d), { title: 'العنوان', body: 'نص الخبر\nسطر آخر', tags: ['المغرب', 'شوف تيفي', 'أخبار'], videoUrl: '' });
+  assert.deepEqual(errors(d, 'wordpress'), []);
+  // A filled Tags field wins: the last line stays in the body.
+  d.wordpress.tags = 'وسم';
+  assert.equal(wordpressArticle(d).body, 'نص الخبر\nسطر آخر\nالمغرب،شوف تيفي, أخبار');
+  // Title + body only: no line is taken as tags.
+  d.wordpress.tags = '';
+  d.sharedText = 'العنوان\nنص الخبر';
+  assert.deepEqual(wordpressArticle(d).tags, []);
+  assert.ok(errors(d, 'wordpress').some((m) => /needs tags: put them on the last line/.test(m)));
+  // Video: the YouTube line is removed from the text and becomes the Video URL (Link is the fallback).
+  d.wordpress = { ...d.wordpress, postType: 'program', categories: ['بوز'], options: [] };
+  d.sharedText = 'عنوان الفيديو\nhttps://www.youtube.com/watch?v=abc\nوصف الفيديو\nشوف تيفي،المغرب';
+  assert.deepEqual(wordpressArticle(d), { title: 'عنوان الفيديو', body: 'وصف الفيديو', tags: ['شوف تيفي', 'المغرب'], videoUrl: 'https://www.youtube.com/watch?v=abc' });
+  assert.deepEqual(errors(d, 'wordpress'), []);
 });

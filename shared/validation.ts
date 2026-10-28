@@ -260,43 +260,54 @@ export function isYouTubeUrl(value: string): boolean {
   }
 }
 
+const YOUTUBE_IN_TEXT = /https?:\/\/(?:www\.|m\.)?(?:youtube\.com|youtu\.be|youtube-nocookie\.com)\/[^\s]+/i;
+const splitTags = (s: string) => s.split(/[,،]/).map((t) => t.trim()).filter(Boolean);
+
 /**
- * The Chouf News Desk text format: the title (or the WordPress Title field), an optional "شوف تيفي"
- * byline line, then the body. Tags come from the Tags field.
+ * The Chouf News Desk text format, read line by line (blank lines ignored):
+ *   title / optional "شوف تيفي" byline / body… / tags (last line, comma-separated).
+ * For a video, the first YouTube link on any line is the Video URL (that line is removed).
+ * The Title and Tags fields, when filled, win over the first and last lines; Link is the
+ * fallback Video URL.
  */
-export function wordpressArticle(draft: Draft): { title: string; body: string; tags: string[] } {
-  const lines = baseText(draft, 'wordpress').split(/\r?\n/);
-  const dropBlank = () => {
-    while (lines.length && !lines[0].trim()) lines.shift();
-  };
-  let title = draft.wordpress.title.trim();
-  if (!title) {
-    dropBlank();
-    title = (lines.shift() ?? '').trim();
+export function wordpressArticle(draft: Draft): { title: string; body: string; tags: string[]; videoUrl: string } {
+  const wp = draft.wordpress;
+  let lines = baseText(draft, 'wordpress')
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  let videoUrl = '';
+  if (wp.postType === 'program') {
+    lines = lines.filter((s) => {
+      const m = !videoUrl && YOUTUBE_IN_TEXT.exec(s);
+      if (m) videoUrl = m[0];
+      return !m;
+    });
+    videoUrl ||= draft.link.url.trim();
   }
-  dropBlank();
-  if (lines[0]?.trim() === 'شوف تيفي') lines.shift();
-  const body = lines.join('\n').trim();
-  const tags = draft.wordpress.tags.split(/[,،]/).map((t) => t.trim()).filter(Boolean);
-  return { title, body, tags };
+  const title = wp.title.trim() || (lines.shift() ?? '');
+  if (lines[0] === 'شوف تيفي') lines.shift();
+  let tags = splitTags(wp.tags);
+  // Like the News Desk, the last line is the tags only when there's also a body above it.
+  if (!tags.length && lines.length >= 2) tags = splitTags(lines.pop()!);
+  return { title, body: lines.join('\n'), tags, videoUrl };
 }
 
 function buildWordPress(draft: Draft): DestinationContent {
   const result = buildSingle(draft, 'wordpress');
   const wp = draft.wordpress;
-  const { title, body, tags } = wordpressArticle(draft);
+  const { title, body, tags, videoUrl } = wordpressArticle(draft);
   const choices = WORDPRESS_CHOICES[wp.postType];
   // Replaced by the more precise title/body messages below.
   const issues = result.issues.filter((i) => !i.message.startsWith('Nothing to post'));
-  if (!title) issues.push({ level: 'error', message: 'WordPress needs a title: fill Title, or put it on the first line of the text.' });
-  if (!body) issues.push({ level: 'error', message: 'WordPress needs the article body (the text under the title line).' });
-  if (!tags.length) issues.push({ level: 'error', message: 'WordPress needs at least one tag.' });
+  if (!title) issues.push({ level: 'error', message: 'WordPress needs a title: put it on the first line of the text, or fill Title.' });
+  if (!body) issues.push({ level: 'error', message: 'WordPress needs the article body: title on the first line, body, then tags on the last line.' });
+  if (!tags.length) issues.push({ level: 'error', message: 'WordPress needs tags: put them on the last line (comma-separated), or fill Tags.' });
   const unknown = [...wp.categories.filter((c) => !choices.categories.includes(c)), ...wp.options.filter((o) => !choices.options.includes(o))];
   if (unknown.length) issues.push({ level: 'error', message: `Not a WordPress choice for this type: ${unknown.join(', ')}.` });
   if (wp.postType === 'program') {
-    const url = draft.link.url.trim();
-    if (url && !isYouTubeUrl(url)) issues.push({ level: 'error', message: 'A WordPress video needs a YouTube link in Link.' });
-    else if (!url) issues.push({ level: 'warning', message: 'No YouTube link in Link: the article\'s Video URL stays empty.' });
+    if (videoUrl && !isYouTubeUrl(videoUrl)) issues.push({ level: 'error', message: 'A WordPress video needs a YouTube link (in the text or in Link).' });
+    else if (!videoUrl) issues.push({ level: 'warning', message: 'No YouTube link in the text or in Link: the article\'s Video URL stays empty.' });
   }
   return { ...result, title, text: body, textLength: graphemeLength(body), issues };
 }
