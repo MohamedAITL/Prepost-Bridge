@@ -64,6 +64,8 @@ export interface JobSnapshot {
   /** Set while the automation is paused waiting for the user to do something in the browser. */
   awaitingUser: string | null;
   hasPage: boolean;
+  /** WordPress: the article's title and public link (live once published), to copy. */
+  article?: { title: string; url: string; published: boolean };
   startedAt: number;
   updatedAt: number;
   logs: JobLogEntry[];

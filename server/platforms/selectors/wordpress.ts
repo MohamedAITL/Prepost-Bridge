@@ -6,8 +6,11 @@ const ADMIN = 'https://0561102b93f7daa97.chouftv.ma/cms/wp-admin/';
 export const WP = {
   adminUrl: ADMIN,
   newPostUrl: (postType: 'press' | 'program') => `${ADMIN}post-new.php?post_type=${postType}`,
-  /** Public address of a published news article. */
+  /** Public address of a news article (the News Desk's fallback when no permalink link is shown). */
   pressLink: (id: string) => `https://chouftv.ma/press/${id}.html`,
+  /** Hosts of the public site, and where WordPress shows the article's permalink after saving. */
+  publicHosts: ['chouftv.ma', '0561102b93f7daa97.chouftv.ma'],
+  permalinkLinks: '#sample-permalink a, #edit-slug-box a, #view-post-btn a, #message a',
 
   session: {
     loggedIn: ['#wpadminbar', '#post-body', '#title'],

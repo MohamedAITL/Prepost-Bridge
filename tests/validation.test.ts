@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { emptyDraft, type Draft, type MediaItem } from '../shared/types';
+import { publicLink } from '../server/platforms/wordpress';
 import { appendLink, batchProblems, buildDestinationContent, graphemeLength, planBatch, planJobs, wordpressArticle, xWeightedLength } from '../shared/validation';
 
 const img = (id: string, extra: Partial<MediaItem> = {}): MediaItem => ({ id, name: `${id}.jpg`, mime: 'image/jpeg', size: 100_000, kind: 'image', source: 'upload', ...extra });
@@ -293,4 +294,12 @@ test('WordPress detects title, body and tags like the News Desk (tags on the las
   d.sharedText = 'عنوان الفيديو\nhttps://www.youtube.com/watch?v=abc\nوصف الفيديو\nشوف تيفي،المغرب';
   assert.deepEqual(wordpressArticle(d), { title: 'عنوان الفيديو', body: 'وصف الفيديو', tags: ['شوف تيفي', 'المغرب'], videoUrl: 'https://www.youtube.com/watch?v=abc' });
   assert.deepEqual(errors(d, 'wordpress'), []);
+});
+
+test('WordPress link: only the public article address, never the admin; news must match its id', () => {
+  const admin = 'https://0561102b93f7daa97.chouftv.ma/cms/wp-admin/post.php?post=5';
+  assert.equal(publicLink([admin, 'https://evil.example/press/5.html', '/press/5.html'], 'press', '5'), 'https://chouftv.ma/press/5.html');
+  assert.equal(publicLink(['https://chouftv.ma/press/6.html'], 'press', '5'), null, 'another article');
+  assert.equal(publicLink([null, 'https://chouftv.ma/program/77.html'], 'program', '77'), 'https://chouftv.ma/program/77.html');
+  assert.equal(publicLink(['https://chouftv.ma/'], 'program', '77'), null);
 });

@@ -344,6 +344,10 @@ class AutomationManager extends EventEmitter {
       snapshot: (label: string) => this.saveDiagnostics(job, label),
       showTab: (reason: string) => this.showTab(job, page, reason),
       hideTab: () => this.hideTab(job),
+      setArticle: (article) => {
+        this.update(job, { article });
+        this.jobLog(job, `Article link${article.published ? '' : ' (live once published)'}: ${article.url}`);
+      },
       publishClick: (locator, purpose) => {
         throwIfCancelled();
         this.jobLog(job, `Pressing "${purpose}" (auto-publish is on)`, 'warn');

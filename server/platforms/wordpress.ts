@@ -70,6 +70,24 @@ export function articleHtml(body: string): string {
     .join('\n');
 }
 
+/**
+ * The article's public address from WordPress's permalink links, as the News Desk read it: on the
+ * public site (not the admin), and for news exactly /press/<id>.html.
+ */
+export function publicLink(hrefs: (string | null)[], postType: 'press' | 'program', id: string): string | null {
+  for (const href of hrefs) {
+    try {
+      const u = new URL(href ?? '', WP.adminUrl);
+      if (!WP.publicHosts.includes(u.hostname) || u.pathname.startsWith('/cms/') || u.pathname === '/') continue;
+      if (postType === 'press' && u.pathname !== `/press/${id}.html`) continue;
+      return `https://chouftv.ma${u.pathname}`;
+    } catch {
+      /* not a URL */
+    }
+  }
+  return null;
+}
+
 /** A custom field found by its visible label (label, table row, meta box or ACF field). */
 async function fieldByLabel(page: Page, label: string): Promise<Locator | null> {
   const input = 'input[type=text], input[type=url], input:not([type]), textarea';
@@ -171,6 +189,10 @@ export const wordpressModule: PlatformModule = {
     ctx.check('Title matches', titleNow === normalizeForCompare(content.title ?? '') ? 'pass' : 'fail');
     const publish = await observeOnly(page.locator(WP.publishButton));
     ctx.check('Article ready', publish.visible ? 'pass' : 'unverified', publish.visible ? undefined : 'The Publish button is not showing; check the article in the tab.');
+    // WordPress gives the article its id when the editor opens, so a news article's address is
+    // already known; it goes live when the article is published.
+    const id = await page.locator(WP.postId).inputValue().catch(() => '');
+    if (wp.postType === 'press' && /^\d+$/.test(id)) ctx.setArticle({ title: content.title ?? '', url: WP.pressLink(id), published: false });
   },
 
   async publish(ctx) {
@@ -179,7 +201,11 @@ export const wordpressModule: PlatformModule = {
     // WordPress reloads on post.php with the post's status set to "publish".
     const done = await pollUntil(async () => /\/post\.php/.test(page.url()) && (await page.locator(WP.publishedStatus).inputValue().catch(() => '')) === 'publish', 90_000, 1000);
     if (!done) throw new Error('WordPress did not confirm the article is published.');
+    const postType = content.wordpress!.postType;
     const id = await page.locator(WP.postId).inputValue().catch(() => '');
-    ctx.check('Published on WordPress', 'pass', content.wordpress!.postType === 'press' && /^\d+$/.test(id) ? WP.pressLink(id) : undefined);
+    const hrefs = await page.locator(WP.permalinkLinks).evaluateAll((links) => links.map((a) => a.getAttribute('href')));
+    const url = publicLink(hrefs, postType, id) ?? (postType === 'press' && /^\d+$/.test(id) ? WP.pressLink(id) : null);
+    if (url) ctx.setArticle({ title: content.title ?? '', url, published: true });
+    ctx.check('Published on WordPress', 'pass', url ?? 'Find the article\'s link in WordPress.');
   },
 };

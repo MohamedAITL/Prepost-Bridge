@@ -3,6 +3,7 @@ import {
   ArrowClockwiseIcon,
   CaretDownIcon,
   CheckCircleIcon,
+  CopyIcon,
   CircleNotchIcon,
   EyeIcon,
   PlayIcon,
@@ -37,6 +38,35 @@ function StatusIcon({ job }: { job: JobSnapshot }) {
   if (job.status === 'needs_attention' || job.status === 'login_required' || job.awaitingUser) return <WarningCircleIcon size={18} weight="fill" aria-hidden />;
   if (job.status === 'cancelled') return <StopIcon size={18} aria-hidden />;
   return <CircleNotchIcon size={18} className="spin" aria-hidden />;
+}
+
+/** WordPress: the article's title and link, copied together like the Chouf News Desk did. */
+function ArticleLink({ article }: { article: NonNullable<JobSnapshot['article']> }) {
+  const [copied, setCopied] = useState<'yes' | 'failed' | null>(null);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(`${article.title}\n${article.url}`);
+      setCopied('yes');
+    } catch {
+      setCopied('failed');
+    }
+  };
+  return (
+    <div className="article-link">
+      <div className="article-link-text">
+        <strong dir="auto">{article.title}</strong>
+        <a href={article.url} target="_blank" rel="noreferrer" dir="ltr">
+          {article.url}
+        </a>
+        <span className="muted small">
+          {copied === 'yes' ? 'Title and link copied.' : copied === 'failed' ? 'Copy blocked by the browser: select the title and link and copy them.' : article.published ? 'Published.' : 'The link works once you publish the article in WordPress.'}
+        </span>
+      </div>
+      <button type="button" className="btn small" onClick={copy}>
+        <CopyIcon size={14} aria-hidden /> Copy title &amp; link
+      </button>
+    </div>
+  );
 }
 
 function JobRow({ job, onRetry, onContinue, onCancel, onFocus, onDismiss }: { job: JobSnapshot } & Omit<Props, 'jobs'>) {
@@ -77,6 +107,8 @@ function JobRow({ job, onRetry, onContinue, onCancel, onFocus, onDismiss }: { jo
           </div>
         </div>
       )}
+
+      {job.article && <ArticleLink article={job.article} />}
 
       <div className="job-actions">
         {job.hasPage && (job.status === 'ready' || job.status === 'needs_attention' || job.status === 'published') && (

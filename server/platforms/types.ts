@@ -48,6 +48,8 @@ export interface PrepareContext {
   /** Save the page outline locally for troubleshooting (no cookies, best effort). */
   snapshot(label: string): Promise<void>;
   throwIfCancelled(): void;
+  /** WordPress: show the article's title and link on the job (to copy). */
+  setArticle(article: { title: string; url: string; published: boolean }): void;
   /** Press the final Post/Publish/Share button. Refuses unless auto-publish is on for this job. */
   publishClick(locator: Locator, purpose: string): Promise<void>;
 }

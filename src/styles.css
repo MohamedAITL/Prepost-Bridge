@@ -1249,6 +1249,24 @@ progress {
   gap: 6px;
   flex-wrap: wrap;
 }
+.article-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.article-link-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.article-link-text a {
+  overflow-wrap: anywhere;
+}
 .details-toggle[aria-expanded='true'] svg {
   transform: rotate(180deg);
 }

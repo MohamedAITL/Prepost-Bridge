@@ -8,6 +8,7 @@ export function testContext(page: Page, content: JobContent, allowPublish = fals
   const checks: JobCheck[] = [];
   const statuses: string[] = [];
   const waits: string[] = [];
+  const articles: { title: string; url: string; published: boolean }[] = [];
   const ctx: PrepareContext = {
     page,
     content,
@@ -23,6 +24,7 @@ export function testContext(page: Page, content: JobContent, allowPublish = fals
     showTab: async () => undefined,
     hideTab: async () => undefined,
     publishClick: (locator, purpose) => publishClick(locator, purpose, allowPublish),
+    setArticle: (a) => articles.push(a),
   };
-  return { ctx, checks, statuses, waits };
+  return { ctx, checks, statuses, waits, articles };
 }

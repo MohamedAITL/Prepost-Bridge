@@ -162,7 +162,9 @@ const WP_NEW_POST = `<!doctype html><meta charset="utf-8">
   document.querySelector('#publish').addEventListener('click', () => { window.published = true; location.href = '${WP_ADMIN}post.php?post=123&action=edit'; });
 </script>`;
 const WP_PUBLISHED = `<!doctype html><meta charset="utf-8"><div id="wpadminbar">admin</div>
-<input type="hidden" id="post_ID" value="123"><input type="hidden" id="original_post_status" value="publish"><input type="submit" id="publish" value="Update">`;
+<input type="hidden" id="post_ID" value="123"><input type="hidden" id="original_post_status" value="publish"><input type="submit" id="publish" value="Update">
+<div id="message"><a href="${WP_ADMIN}edit.php?post_type=press">All posts</a></div>
+<span id="sample-permalink"><a href="https://0561102b93f7daa97.chouftv.ma/press/123.html">permalink</a></span>`;
 
 test('WordPress module fills a Chouf article (title, body, Facebook title, tags, sections, featured image) and publishes only with auto-publish on', async () => {
   const context = await browser.newContext();
@@ -198,12 +200,14 @@ test('WordPress module fills a Chouf article (title, body, Facebook title, tags,
   assert.equal(uploads, 1);
   assert.deepEqual(off.checks.filter((c) => c.state !== 'pass'), [], JSON.stringify(off.checks));
   assert.equal(await page.evaluate(() => (window as unknown as { published: boolean }).published), false, 'prepare never publishes');
+  assert.deepEqual(off.articles, [{ title: 'عنوان الخبر', url: 'https://chouftv.ma/press/123.html', published: false }], 'the link is known before publishing');
 
   await assert.rejects(wordpressModule.publish(off.ctx), /auto-publish is off/);
   const on = testContext(page, content, true);
   await wordpressModule.publish(on.ctx);
   assert.ok(page.url().includes('/post.php'));
   assert.deepEqual(on.checks.find((c) => c.label === 'Published on WordPress'), { label: 'Published on WordPress', state: 'pass', detail: 'https://chouftv.ma/press/123.html' });
+  assert.deepEqual(on.articles, [{ title: 'عنوان الخبر', url: 'https://chouftv.ma/press/123.html', published: true }], 'read from the permalink, on the public host');
   await context.close();
 });
 
