@@ -36,6 +36,7 @@ async function connect() {
     ws = socket;
     send({ type: 'hello', version: chrome.runtime.getManifest().version, userAgent: navigator.userAgent });
     setStatus('connected');
+    deliverWhatsApp();
   };
   socket.onmessage = (event) => handle(JSON.parse(event.data));
   socket.onclose = () => {
@@ -87,6 +88,12 @@ async function targetWindowId() {
 }
 
 async function handle(msg) {
+  if (msg.type === 'whatsappAck') {
+    const done = whatsappAcks.get(msg.ref);
+    whatsappAcks.delete(msg.ref);
+    if (done) done(msg);
+    return;
+  }
   const reply = (result) => send({ id: msg.id, result: result ?? {} });
   const fail = (e) => send({ id: msg.id, error: (e && e.message) || String(e) });
   try {
@@ -185,10 +192,185 @@ setInterval(() => {
 
 // Reconnect when the app starts later, and keep the service worker alive while connected.
 chrome.alarms.create('bridge-retry', { periodInMinutes: 0.5 });
-chrome.alarms.onAlarm.addListener(() => {
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== 'bridge-retry') return;
   if (ws) send({ type: 'ping' });
   else connect();
+  deliverWhatsApp();
 });
 chrome.runtime.onStartup.addListener(connect);
 chrome.runtime.onInstalled.addListener(connect);
 connect();
+
+// ---------- WhatsApp → Prepost ----------
+// whatsapp.js (on web.whatsapp.com) captures image+caption messages sent after a "." in the chats
+// you chose, and hands them here (RELAY_DRAFT). They're kept in a local queue until the Prepost
+// engine confirms it has them; it turns each one into a new Post in the dashboard.
+
+const WA_QUEUE = 'pendingWhatsAppDrafts';
+const WA_FINGERPRINTS = 'waContentFingerprintsV21';
+const whatsappAcks = new Map(); // ref → resolve(ack)
+let whatsappDelivering = false;
+
+const waStatus = (message) => chrome.storage.local.set({ bridgeStatus: { message, time: new Date().toLocaleTimeString() } });
+
+// Same chat + same caption (spacing ignored) + same image = the same news item.
+async function waFingerprint(draft) {
+  const bytes = new TextEncoder().encode((draft.chat || '') + '␟' + draft.title.trim().replace(/\s+/g, ' ') + '␟' + draft.imageHash);
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((n) => n.toString(16).padStart(2, '0')).join('');
+}
+
+// Read-modify-write of the queue, one at a time (several WhatsApp tabs can capture at once).
+let waQueueWrites = Promise.resolve();
+function waSerialized(task) {
+  const run = waQueueWrites.then(task, task);
+  waQueueWrites = run.catch(() => {});
+  return run;
+}
+
+async function waEnqueue(draft) {
+  if (!draft?.id || !draft?.title || !draft?.image?.startsWith('data:image/')) throw new Error('invalid image/title');
+  return waSerialized(async () => {
+    const fp = await waFingerprint(draft);
+    const st = await chrome.storage.local.get({ [WA_QUEUE]: [], [WA_FINGERPRINTS]: {} });
+    const queue = st[WA_QUEUE] || [];
+    const ledger = st[WA_FINGERPRINTS] || {};
+    if (ledger[fp] || queue.some((x) => x.id === draft.id || x.fingerprint === fp)) {
+      await waStatus('تجاهلنا نسخة مكررة من الخبر: ' + draft.title.slice(0, 65));
+      return queue.length;
+    }
+    if (queue.length >= 100) throw new Error('طابور الإرسال عامر (100)؛ شغّل Prepost');
+    queue.push({ ...draft, fingerprint: fp });
+    ledger[fp] = { firstSeen: Date.now(), title: draft.title };
+    const recent = Object.entries(ledger).sort((a, b) => a[1].firstSeen - b[1].firstSeen).slice(-1500);
+    await chrome.storage.local.set({ [WA_QUEUE]: queue, [WA_FINGERPRINTS]: Object.fromEntries(recent) });
+    await waStatus('تحفظ الخبر محلياً؛ ' + queue.length + ' فالانتظار');
+    return queue.length;
+  });
+}
+
+function waSendToEngine(draft) {
+  return new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return reject(new Error('Prepost ما خدامش أو الإضافة ما مربوطاش'));
+    const ref = crypto.randomUUID();
+    const timer = setTimeout(() => {
+      whatsappAcks.delete(ref);
+      reject(new Error('Prepost ما جاوبش'));
+    }, 30000);
+    whatsappAcks.set(ref, (ack) => {
+      clearTimeout(timer);
+      resolve(ack);
+    });
+    send({ type: 'whatsappDraft', ref, draft: { title: draft.title, image: draft.image, chat: draft.chat } });
+  });
+}
+
+/** Send waiting items to the engine, oldest first; stop at the first one it can't receive. */
+async function deliverWhatsApp() {
+  if (whatsappDelivering || !ws || ws.readyState !== WebSocket.OPEN) return;
+  whatsappDelivering = true;
+  try {
+    for (let i = 0; i < 100; i++) {
+      const next = (await chrome.storage.local.get({ [WA_QUEUE]: [] }))[WA_QUEUE][0];
+      if (!next) return;
+      let ack;
+      try {
+        ack = await waSendToEngine(next);
+      } catch (e) {
+        await waStatus('الخبر باقي فالانتظار: ' + e.message);
+        return;
+      }
+      // A refused item (e.g. not a real image) would be refused again: drop it instead of blocking the queue.
+      if (!ack.ok) await waStatus('Prepost رفض الخبر: ' + (ack.error || '') + ' — ' + next.title.slice(0, 50));
+      else await waStatus((ack.duplicate ? 'كان موجود من قبل فـ Prepost: ' : 'وصل الخبر لـ Prepost: ') + next.title.slice(0, 70));
+      await waSerialized(async () => {
+        const current = (await chrome.storage.local.get({ [WA_QUEUE]: [] }))[WA_QUEUE] || [];
+        await chrome.storage.local.set({ [WA_QUEUE]: current.filter((d) => d.id !== next.id) });
+      });
+    }
+  } catch (e) {
+    await waStatus('خطأ: ' + e.message);
+  } finally {
+    whatsappDelivering = false;
+  }
+}
+
+// Watch-all mode: a separate WhatsApp tab moves through the chosen chats (WhatsApp's own search),
+// one chat per cycle. Your own WhatsApp tab is never navigated.
+let waRotationBusy = false;
+const waScannerLog = (message) => chrome.storage.local.set({ multiScanStatus: { message, time: new Date().toLocaleTimeString() } });
+
+async function waScannerTab() {
+  const { scannerTabId } = await chrome.storage.local.get({ scannerTabId: null });
+  if (scannerTabId) {
+    try {
+      const t = await chrome.tabs.get(scannerTabId);
+      if (t?.url?.startsWith('https://web.whatsapp.com/')) return t;
+    } catch {
+      /* closed */
+    }
+  }
+  const t = await chrome.tabs.create({ url: 'https://web.whatsapp.com/', active: false });
+  await chrome.storage.local.set({ scannerTabId: t.id });
+  return t;
+}
+
+async function waMessageTab(tabId, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['whatsapp.js'] });
+    return chrome.tabs.sendMessage(tabId, message);
+  }
+}
+
+async function waRotate() {
+  if (waRotationBusy) return;
+  waRotationBusy = true;
+  try {
+    const st = await chrome.storage.local.get({ enabled: true, multiEnabled: false, chats: [], rotationIndex: 0 });
+    if (!st.enabled || !st.multiEnabled || !st.chats.length) return;
+    const tab = await waScannerTab();
+    if (tab.status !== 'complete') return waScannerLog('تبويب WhatsApp ديال المراقبة كيتحمّل');
+    const index = st.rotationIndex % st.chats.length;
+    const chat = st.chats[index];
+    await waScannerLog('كنفحص المحادثة ' + (index + 1) + '/' + st.chats.length + ': ' + chat);
+    const nav = await waMessageTab(tab.id, { type: 'ROTATE_TO_CHAT', chat });
+    if (!nav?.ok) throw new Error(nav?.error || 'فشل فتح المحادثة ' + chat);
+    await new Promise((r) => setTimeout(r, 1200));
+    const result = await waMessageTab(tab.id, { type: 'SCAN' });
+    await chrome.storage.local.set({ rotationIndex: (index + 1) % st.chats.length });
+    await waScannerLog(chat + ': ' + (result?.count || 0) + ' خبر جديد؛ ' + (result?.error || 'الفحص ناجح'));
+  } catch (e) {
+    await waScannerLog('خطأ فالمراقبة: ' + e.message);
+  } finally {
+    waRotationBusy = false;
+  }
+}
+
+chrome.alarms.create('multiChatRotation', { periodInMinutes: 0.5 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'multiChatRotation') waRotate();
+});
+
+chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
+  switch (msg?.type) {
+    case 'RELAY_DRAFT':
+      waEnqueue(msg.draft)
+        .then((count) => {
+          respond({ ok: true, queued: true, count });
+          deliverWhatsApp();
+        })
+        .catch((e) => respond({ ok: false, error: e.message }));
+      return true;
+    case 'RUN_MULTI_SCAN':
+    case 'START_MULTI_SCAN':
+      waRotate().then(() => respond({ ok: true }));
+      return true;
+    case 'GET_MULTI_STATUS':
+      chrome.storage.local.get({ multiScanStatus: null }).then(respond);
+      return true;
+    default:
+      return false;
+  }
+});

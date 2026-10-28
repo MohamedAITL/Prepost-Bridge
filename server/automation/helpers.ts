@@ -194,6 +194,17 @@ export async function fillTextField(page: Page, locator: Locator, text: string):
   throw new Error('The text could not be entered reliably (the editor content does not match).');
 }
 
+/**
+ * Set an input/textarea's value and fire only "input" and "change" (never click or submit), for
+ * fields Playwright can't fill because they're hidden (e.g. inside a collapsed WordPress box).
+ */
+export async function setFieldValue(field: Locator, value: string): Promise<void> {
+  await field.evaluate((el, v) => {
+    (el as HTMLInputElement).value = v;
+    for (const type of ['input', 'change']) el.dispatchEvent(new Event(type, { bubbles: true }));
+  }, value);
+}
+
 export async function setFiles(input: Locator, paths: string[]) {
   const multiple = await input.evaluate((el) => (el as HTMLInputElement).multiple).catch(() => true);
   if (paths.length > 1 && !multiple) throw new Error('This upload field accepts only one file at a time.');

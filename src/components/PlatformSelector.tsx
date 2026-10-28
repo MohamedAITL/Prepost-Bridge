@@ -18,6 +18,7 @@ const SUBTITLE: Record<DestinationId, string> = {
   x: 'Up to 4 images or 1 video',
   youtube: 'Video, Short or channel post',
   tiktok: 'Video or photos',
+  wordpress: 'Chouf article: news or video',
 };
 
 export function PlatformSelector({ platforms, onToggle, metaPagePicker, youtubeChannelPicker }: Props) {

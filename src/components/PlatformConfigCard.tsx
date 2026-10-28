@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { FilmStripIcon } from '@phosphor-icons/react';
 import { buildDestinationContent, graphemeLength } from '../../shared/validation';
 import { YOUTUBE_TITLE_LIMIT } from '../../shared/rules';
+import { WORDPRESS_CHOICES, wordpressDefaults } from '../../shared/types';
 import { api } from '../api';
 import type { Draft, PlatformConfig } from '../types/content';
 import type { DestinationId } from '../types/platform';
@@ -35,12 +36,17 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
   const ytPost = d === 'youtube' && draft.youtube.postType === 'post';
   const ytVideo = d === 'youtube' && !ytPost;
   const name = BRAND_NAMES[d];
-  const textLabel = ytVideo ? 'Description' : d === 'tiktok' ? 'Caption' : 'Text';
+  const textLabel = ytVideo ? 'Description' : d === 'tiktok' ? 'Caption' : d === 'wordpress' ? 'Article' : 'Text';
   // YouTube set to video upload, but this post only has images: offer the image-post type.
   const ytMedia = draft.media.filter((m) => selectedIds.includes(m.id) && m.id !== draft.coverId);
   const onlyImages = ytMedia.length > 0 && ytMedia.every((m) => m.kind === 'image');
   const setYt = (patch: Partial<Draft['youtube']>) => onDraftChange((x) => ({ ...x, youtube: { ...x.youtube, ...patch } }));
   const setMeta = (patch: Partial<Draft['meta']>) => onDraftChange((x) => ({ ...x, meta: { ...x.meta, ...patch } }));
+  const setWp = (patch: Partial<Draft['wordpress']>) => onDraftChange((x) => ({ ...x, wordpress: { ...x.wordpress, ...patch } }));
+  const wp = draft.wordpress;
+  const wpChoices = WORDPRESS_CHOICES[wp.postType];
+  const toggleWp = (key: 'options' | 'categories', name: string, on: boolean) =>
+    setWp({ [key]: wpChoices[key].filter((x) => (x === name ? on : wp[key].includes(x))) });
   const media = draft.media.filter((m) => m.id !== draft.coverId);
 
   const toggleMedia = (id: string, on: boolean) => {
@@ -85,6 +91,49 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
           </div>
         )}
 
+        {d === 'wordpress' && (
+          <>
+            <div className="field">
+              <span className="field-label">Type</span>
+              <Segmented
+                label="WordPress article type"
+                value={wp.postType}
+                // Each type has its own options and sections: switch to that type's defaults, keep title and tags.
+                onChange={(postType) => setWp({ ...wordpressDefaults(postType), title: wp.title, tags: wp.tags })}
+                options={[
+                  { value: 'press', label: 'News' },
+                  { value: 'program', label: 'Video' },
+                ]}
+              />
+              {wp.postType === 'program' && <p className="muted small">The YouTube link goes in Link above; it fills the article's Video URL.</p>}
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="wp-title">
+                Title
+              </label>
+              <input id="wp-title" className="input" dir="auto" placeholder="Empty = the first line of the text" value={wp.title} onChange={(e) => setWp({ title: e.target.value })} />
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="wp-tags">
+                Tags
+              </label>
+              <input id="wp-tags" className="input" dir="auto" placeholder="المغرب، شوف تيفي" value={wp.tags} onChange={(e) => setWp({ tags: e.target.value })} />
+            </div>
+            {(['options', 'categories'] as const).map((key) => (
+              <fieldset key={key} className="field">
+                <legend className="field-label">{key === 'options' ? 'Options' : wp.postType === 'program' ? 'Programs' : 'Sections'}</legend>
+                <div className="row">
+                  {wpChoices[key].map((name) => (
+                    <label key={name} className="option small" dir="auto">
+                      <input type="checkbox" checked={wp[key].includes(name)} onChange={(e) => toggleWp(key, name, e.target.checked)} /> {name}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ))}
+          </>
+        )}
+
         {ytVideo && (
           <div className="field">
             <label className="field-label" htmlFor="yt-title">
@@ -118,7 +167,7 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
               </div>
             </>
           )}
-          {draft.link.url.trim() && draft.link.mode === 'append' && (
+          {draft.link.url.trim() && draft.link.mode === 'append' && d !== 'wordpress' && (
             <label className="option small">
               <input type="checkbox" checked={cfg.includeLink} onChange={(e) => onChange({ includeLink: e.target.checked })} /> Add the link on {name}
             </label>

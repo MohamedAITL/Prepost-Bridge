@@ -79,6 +79,14 @@ export async function connectEngine(): Promise<EngineInfo[] | null> {
   return null;
 }
 
+export interface IncomingItem {
+  id: string;
+  text: string;
+  chat: string;
+  media: MediaItem;
+  receivedAt: number;
+}
+
 export interface PostProblem {
   postId: string;
   title: string;
@@ -132,6 +140,9 @@ export const api = {
   getYouTubeChannels: () => request<{ channels: YouTubeChannel[] }>('GET', '/api/youtube/channels'),
   saveYouTubeChannels: (channels: YouTubeChannel[]) => request<{ channels: YouTubeChannel[] }>('PUT', '/api/youtube/channels', { channels }),
   refreshYouTubeChannels: () => request<{ channels: YouTubeChannel[] }>('POST', '/api/youtube/channels/refresh'),
+
+  /** Posts captured from WhatsApp; each one is handed to a single dashboard. */
+  claimIncoming: () => request<{ items: IncomingItem[] }>('POST', '/api/incoming/claim'),
 
   launchBrowser: () => request<BrowserState>('POST', '/api/browser/launch'),
   setBrowserMode: (mode: BrowserMode) => request<BrowserState>('POST', '/api/browser/mode', { mode }),

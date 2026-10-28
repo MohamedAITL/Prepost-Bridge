@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import type { Page } from 'playwright';
 import { ACTIVE_STATUSES, type JobCheck, type JobSnapshot, type JobStatus } from '../../shared/jobs';
 import { DESTINATION_LABELS, MODULE_LABELS, type BatchPost, type Draft, type MetaPage, type ModuleId, type YouTubeChannel } from '../../shared/types';
-import { batchProblems, buildDestinationContent, hasErrors, planBatch, planJobs, type JobPlan, type PostProblem } from '../../shared/validation';
+import { batchProblems, buildDestinationContent, hasErrors, planBatch, planJobs, wordpressArticle, type JobPlan, type PostProblem } from '../../shared/validation';
 import { browserManager } from '../browser/browserManager';
 import { StepError } from '../automation/helpers';
 import { publishClick, SafetyError } from '../automation/safeActions';
@@ -12,6 +12,7 @@ import { tiktokStudioModule } from '../platforms/tiktokStudio';
 import type { JobContent, PlatformModule, PrepareContext, WaitForUserOptions } from '../platforms/types';
 import { xModule } from '../platforms/x';
 import { readYouTubeChannels, youtubeStudioModule } from '../platforms/youtubeStudio';
+import { wordpressModule } from '../platforms/wordpress';
 import { logger } from '../utils/logger';
 import { cdpRelay } from '../bridge/cdpRelay';
 import { savePageOutline } from '../utils/diagnostics';
@@ -22,6 +23,7 @@ export const MODULES: Record<ModuleId, PlatformModule> = {
   x: xModule,
   youtube: youtubeStudioModule,
   tiktok: tiktokStudioModule,
+  wordpress: wordpressModule,
 };
 
 function planLabel(plan: JobPlan, draft?: Draft): string {
@@ -102,7 +104,7 @@ function tabKey(plan: JobPlan): string {
 
 /** How many jobs of each module may run at the same time. YouTube's active channel and TikTok's
  *  single upload draft are browser-wide, so those run one at a time. */
-const MODULE_LIMITS: Record<ModuleId, number> = { youtube: 1, tiktok: 1, meta: 3, x: 2 };
+const MODULE_LIMITS: Record<ModuleId, number> = { youtube: 1, tiktok: 1, meta: 3, x: 2, wordpress: 2 };
 const MAX_CONCURRENT = 6;
 
 class AutomationManager extends EventEmitter {
@@ -166,6 +168,10 @@ class AutomationManager extends EventEmitter {
       thumbnail: first.thumbnail ? resolve(first.thumbnail.id) : null,
       youtube: plan.moduleId === 'youtube' ? draft.youtube : undefined,
       meta: plan.moduleId === 'meta' ? { confirmDestinations: draft.meta.confirmDestinations, videoAs: draft.meta.videoAs, page: plan.metaPage ?? '' } : undefined,
+      wordpress:
+        plan.moduleId === 'wordpress'
+          ? { postType: draft.wordpress.postType, tags: wordpressArticle(serverDraft).tags, categories: draft.wordpress.categories, options: draft.wordpress.options, videoUrl: draft.link.url.trim() }
+          : undefined,
     };
   }
 

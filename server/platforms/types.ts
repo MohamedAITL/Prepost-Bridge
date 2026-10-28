@@ -19,6 +19,8 @@ export interface JobContent {
   youtube?: YouTubeOptions;
   /** Meta: the Page to post as ('' = whichever Page is open) and whether to pause before filling. */
   meta?: { page: string; confirmDestinations: boolean; videoAs: 'reel' | 'post' };
+  /** WordPress: the article's settings (its title and body are `title` and `text`). */
+  wordpress?: { postType: 'press' | 'program'; tags: string[]; categories: string[]; options: string[]; videoUrl: string };
 }
 
 export interface WaitForUserOptions {

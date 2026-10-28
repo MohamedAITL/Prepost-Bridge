@@ -43,6 +43,7 @@ const draftSchema = z.object({
     x: platformConfig,
     youtube: platformConfig,
     tiktok: platformConfig,
+    wordpress: platformConfig,
   }),
   youtube: z.object({
     postType: z.enum(['video', 'post']),
@@ -53,6 +54,14 @@ const draftSchema = z.object({
     advanceToVisibilityStep: z.boolean(),
   }),
   meta: z.object({ pages: z.array(z.object({ name: z.string().min(1).max(200), instagram: z.boolean() })).max(100), confirmDestinations: z.boolean(), videoAs: z.enum(['reel', 'post']) }),
+  // Which sections/options are allowed per type is checked in shared/validation.ts.
+  wordpress: z.object({
+    postType: z.enum(['press', 'program']),
+    title: z.string().max(1000),
+    tags: z.string().max(2000),
+    categories: z.array(z.string().max(100)).max(20),
+    options: z.array(z.string().max(100)).max(20),
+  }),
 });
 
 export function parseDraft(input: unknown): Draft {

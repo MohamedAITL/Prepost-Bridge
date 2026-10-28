@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <style>
-      body { font: 13px system-ui, sans-serif; width: 280px; margin: 12px; color: #1c1f24; }
+      body { font: 13px system-ui, sans-serif; width: 340px; margin: 12px; color: #1c1f24; }
       h1 { font-size: 14px; margin: 0 0 8px; }
       label { display: block; margin: 8px 0 4px; font-weight: 600; }
       input { width: 100%; box-sizing: border-box; padding: 6px; font: inherit; }
@@ -11,6 +11,18 @@
       .status { padding: 6px 8px; border-radius: 6px; background: #eef0f3; }
       .connected { background: #e6f4ea; color: #1f7a43; }
       p { color: #646b75; font-size: 12px; }
+      /* WhatsApp → Prepost section (from the WhatsApp → Prepost v2.1 popup). */
+      #wa { border-top: 1px solid #dde0e4; margin-top: 14px; padding-top: 4px; font: 14px Arial, sans-serif; }
+      #wa h2 { font-size: 15px; margin: 8px 0; }
+      #wa label { font-weight: normal; }
+      #wa input[type='checkbox'] { width: auto; padding: 0; }
+      #wa button { padding: 10px; margin: 6px 0; border: 0; border-radius: 8px; background: #126e56; color: white; width: 100%; }
+      #wa select { width: 100%; padding: 9px; margin: 7px 0; }
+      #wa #state { white-space: pre-wrap; line-height: 1.7; }
+      #wa .hint { color: #666; font-size: 12px; line-height: 1.5; }
+      #wa .chat { padding: 5px; display: flex; justify-content: space-between; align-items: center; background: #f4f5f3; margin: 5px 0; border-radius: 6px; }
+      #wa .chat button { width: auto; background: #a33; margin: 0; padding: 5px 10px; }
+      #wa #diagnostic { white-space: pre-wrap; background: #f4f5f3; padding: 8px; border-radius: 6px; margin: 7px 0; }
     </style>
   </head>
   <body>
@@ -21,7 +33,35 @@
     <label for="port">App port</label>
     <input id="port" type="number" value="5174" />
     <button id="save">Save &amp; connect</button>
-    <p>Only connects to the app on 127.0.0.1. It controls only tabs the app opens and never presses Publish.</p>
+    <p>Only connects to the app on 127.0.0.1. It controls only tabs the app opens, and presses Publish only when you turn on Auto-publish.</p>
+
+    <section id="wa" lang="ar" dir="rtl">
+      <h2>WhatsApp → Prepost</h2>
+      <div id="state">...</div>
+      <button id="choose">➕ زيد المحادثة المفتوحة للائحة</button>
+      <div id="chats"></div>
+      <label><input id="multiEnabled" type="checkbox" /> راقب جميع المحادثات المختارة فتبويب مستقل</label>
+      <p class="hint">الوضع الجديد كيتنقل بين المحادثات عبر بحث WhatsApp العادي؛ كيتفحص محادثة واحدة فكل دورة (30 ثانية تقريباً). خاص المتصفح وWhatsApp Web يبقاو مفتوحين، وكل محادثة خاص يكون فيها نقطة البداية. ما كيتراقبوش المحادثات كاملين فآن واحد.</p>
+      <label>وقت المراقبة
+        <select id="interval">
+          <option value="0">⚡ فوري (ملي توصل الرسالة)</option>
+          <option value="30">كل 30 ثانية</option>
+          <option value="60">كل دقيقة</option>
+          <option value="120">كل جوج دقايق</option>
+        </select>
+      </label>
+      <label><input id="enabled" type="checkbox" checked /> تشغيل المراقبة</label>
+      <button id="waSave">حفظ الإعدادات</button>
+      <p class="hint"><strong>نقطة البداية:</strong> صيفط رسالة فيها غير نقطة <b>.</b> فالمحادثة؛ غير الصور المصحوبة بعنوان اللي كيجيو من بعدها غادي يتعالجو.</p>
+      <button id="multiScan">فحص المحادثة التالية من اللائحة</button>
+      <div id="multiStatus" class="hint"></div>
+      <button id="scan">فحص دابا</button>
+      <button id="diagnose" style="background: #555">تشخيص الربط</button>
+      <div id="diagnostic"></div>
+      <small class="hint">كل صورة بعنوان كتولي Post جديد فـ Prepost بنفس المنصات ديال Post 1. خاص Prepost يكون خدام والإضافة مربوطة؛ الأخبار كتبقى فالانتظار حتى يتوصل بيها. النشر كيبقى عندك.</small>
+    </section>
+
     <script src="popup.js"></script>
+    <script src="whatsapp-popup.js"></script>
   </body>
 </html>

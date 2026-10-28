@@ -33,7 +33,7 @@ function errorText(e: unknown): string {
 type EngineState = 'checking' | 'up' | 'down';
 
 export function Dashboard() {
-  const { posts, activeId, draft, update, updatePlatform, updateAll, addPost, duplicatePost, removePost, renamePost, select } = useBatch();
+  const { posts, activeId, draft, update, updatePlatform, updateAll, addPost, addIncoming, duplicatePost, removePost, renamePost, select } = useBatch();
 
   /** Delete a post, and any of its media files that no remaining post uses. */
   const deletePost = (id: string) =>
@@ -109,12 +109,25 @@ export function Dashboard() {
     const es = new EventSource(api.eventsUrl());
     es.addEventListener('jobs', (e) => setJobs(JSON.parse((e as MessageEvent).data)));
     es.addEventListener('browser', (e) => setBrowser(JSON.parse((e as MessageEvent).data)));
+    // Posts captured from WhatsApp: sent as a count (on connect too); claim them as new Posts.
+    es.addEventListener('incoming', (e) => {
+      if (!(Number(JSON.parse((e as MessageEvent).data)) > 0)) return;
+      api
+        .claimIncoming()
+        .then(({ items }) => {
+          if (!items.length) return;
+          addIncoming(items);
+          const chats = [...new Set(items.map((i) => i.chat).filter(Boolean))].join(', ');
+          setNotice({ kind: 'info', text: `${items.length} new ${items.length === 1 ? 'post' : 'posts'} from WhatsApp${chats ? `: ${chats}` : ''}.` });
+        })
+        .catch(() => undefined);
+    });
     es.onopen = () => setEngine('up');
     es.onerror = () => {
       if (es.readyState === EventSource.CLOSED) setEngine('down');
     };
     return () => es.close();
-  }, [engine]);
+  }, [engine, addIncoming]);
 
   const run = useCallback(async (fn: () => Promise<unknown>, success?: string) => {
     try {

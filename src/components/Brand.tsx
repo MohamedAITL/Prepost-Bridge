@@ -1,4 +1,4 @@
-import { siFacebook, siInstagram, siMeta, siTiktok, siX, siYoutube, type SimpleIcon } from 'simple-icons';
+import { siFacebook, siInstagram, siMeta, siTiktok, siWordpress, siX, siYoutube, type SimpleIcon } from 'simple-icons';
 import type { DestinationId } from '../types/platform';
 
 // Official brand marks (Simple Icons, CC0). X and TikTok are black marks, so they follow the text
@@ -9,6 +9,7 @@ const ICONS: Record<DestinationId, { icon: SimpleIcon; color: string }> = {
   x: { icon: siX, color: 'currentColor' },
   youtube: { icon: siYoutube, color: `#${siYoutube.hex}` },
   tiktok: { icon: siTiktok, color: 'currentColor' },
+  wordpress: { icon: siWordpress, color: `#${siWordpress.hex}` },
 };
 
 export const BRAND_NAMES: Record<DestinationId, string> = {
@@ -17,6 +18,7 @@ export const BRAND_NAMES: Record<DestinationId, string> = {
   x: 'X',
   youtube: 'YouTube',
   tiktok: 'TikTok',
+  wordpress: 'WordPress',
 };
 
 export function PlatformLogo({ id, size = 20, title }: { id: DestinationId; size?: number; title?: string }) {

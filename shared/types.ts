@@ -1,13 +1,13 @@
 // Types shared by the React frontend and the Node backend.
 
-export type DestinationId = 'facebook' | 'instagram' | 'x' | 'youtube' | 'tiktok';
+export type DestinationId = 'facebook' | 'instagram' | 'x' | 'youtube' | 'tiktok' | 'wordpress';
 
 /**
  * Destinations offered in the UI. 'facebook' is the Meta destination: each selected Page is posted
  * through Meta Business Suite, and the Page's linked Instagram account is included by Meta itself.
  * 'instagram' stays as an id only so Instagram's rules can be applied to Pages that have one.
  */
-export const DESTINATIONS: DestinationId[] = ['facebook', 'x', 'youtube', 'tiktok'];
+export const DESTINATIONS: DestinationId[] = ['facebook', 'x', 'youtube', 'tiktok', 'wordpress'];
 
 export const DESTINATION_LABELS: Record<DestinationId, string> = {
   facebook: 'Meta',
@@ -15,16 +15,18 @@ export const DESTINATION_LABELS: Record<DestinationId, string> = {
   x: 'X',
   youtube: 'YouTube Studio',
   tiktok: 'TikTok Studio',
+  wordpress: 'WordPress (Chouf)',
 };
 
 /** Automation modules. Facebook and Instagram both go through Meta Business Suite. */
-export type ModuleId = 'meta' | 'x' | 'youtube' | 'tiktok';
+export type ModuleId = 'meta' | 'x' | 'youtube' | 'tiktok' | 'wordpress';
 
 export const MODULE_LABELS: Record<ModuleId, string> = {
   meta: 'Meta Business Suite',
   x: 'X',
   youtube: 'YouTube Studio',
   tiktok: 'TikTok Studio',
+  wordpress: 'WordPress (Chouf)',
 };
 
 export const DESTINATION_MODULE: Record<DestinationId, ModuleId> = {
@@ -33,6 +35,7 @@ export const DESTINATION_MODULE: Record<DestinationId, ModuleId> = {
   x: 'x',
   youtube: 'youtube',
   tiktok: 'tiktok',
+  wordpress: 'wordpress',
 };
 
 export type MediaKind = 'image' | 'video';
@@ -106,6 +109,21 @@ export interface MetaOptions {
   videoAs: 'reel' | 'post';
 }
 
+/** Chouf's WordPress: 'press' = a news article, 'program' = a video (YouTube link from the Link field). */
+export type WordPressPostType = 'press' | 'program';
+
+export interface WordPressOptions {
+  postType: WordPressPostType;
+  /** Article title; '' = the first line of the text. */
+  title: string;
+  /** Comma-separated tags ("," or "،"). */
+  tags: string;
+  /** Ticked sections (WordPress categories), from WORDPRESS_CHOICES. */
+  categories: string[];
+  /** Ticked article options (e.g. "شريط الأخبار"), from WORDPRESS_CHOICES. */
+  options: string[];
+}
+
 export interface Draft {
   sharedText: string;
   /**
@@ -118,6 +136,7 @@ export interface Draft {
   platforms: Record<DestinationId, PlatformConfig>;
   youtube: YouTubeOptions;
   meta: MetaOptions;
+  wordpress: WordPressOptions;
 }
 
 /** One post in a batch: its own text, media, cover and platform choices. */
@@ -143,8 +162,32 @@ export function emptyDraft(): Draft {
       x: emptyPlatformConfig(),
       youtube: emptyPlatformConfig(),
       tiktok: emptyPlatformConfig(),
+      wordpress: emptyPlatformConfig(),
     },
     youtube: { postType: 'video', channel: '', title: '', audience: 'unset', visibility: 'unset', advanceToVisibilityStep: true },
     meta: { pages: [], confirmDestinations: false, videoAs: 'reel' },
+    wordpress: wordpressDefaults('press'),
   };
+}
+
+/**
+ * The options and sections Chouf's WordPress offers per type (copied from the Chouf News Desk
+ * extension). Defaults match the News Desk site: every option ticked, one default section.
+ */
+export const WORDPRESS_CHOICES: Record<WordPressPostType, { options: string[]; categories: string[]; defaultCategories: string[] }> = {
+  press: {
+    options: ['يظهر في الصفحة الرئيسية', 'شريط الأخبار'],
+    categories: ['سياسة', 'مجتمع', 'حوادث وحقوق', 'أخبار', 'دولي', 'فن وثقافة', 'اقتصاد'],
+    defaultCategories: ['سياسة'],
+  },
+  program: {
+    options: ['Featured Program Video', 'الحلقات', 'مقاطع'],
+    categories: ['خارج البلاطو', 'بوز', 'حالة خاصة', 'زووم', 'نسولو الناس'],
+    defaultCategories: ['بوز'],
+  },
+};
+
+export function wordpressDefaults(postType: WordPressPostType): WordPressOptions {
+  const c = WORDPRESS_CHOICES[postType];
+  return { postType, title: '', tags: '', categories: [...c.defaultCategories], options: [...c.options] };
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { emptyDraft, type BatchPost, type DestinationId, type Draft, type PlatformConfig } from '../../shared/types';
+import { emptyDraft, emptyPlatformConfig, type BatchPost, type DestinationId, type Draft, type PlatformConfig } from '../../shared/types';
 
 // Posts (text and per-platform settings) live in sessionStorage: they survive a reload but
 // disappear when the tab is closed. Only non-sensitive defaults go to localStorage.
@@ -11,6 +11,7 @@ interface Prefs {
   enabled: Partial<Record<DestinationId, boolean>>;
   youtube: Pick<Draft['youtube'], 'postType' | 'channel' | 'audience' | 'visibility' | 'advanceToVisibilityStep'>;
   meta: Pick<Draft['meta'], 'confirmDestinations' | 'pages' | 'videoAs'>;
+  wordpress?: Pick<Draft['wordpress'], 'postType' | 'categories' | 'options'>;
 }
 
 interface StoredPost {
@@ -54,8 +55,14 @@ function freshDraft(seedEnabled = false): Draft {
     if (seedEnabled) for (const [d, on] of Object.entries(prefs.enabled ?? {})) if (d in base.platforms) base.platforms[d as DestinationId].enabled = !!on;
     Object.assign(base.youtube, prefs.youtube ?? {});
     Object.assign(base.meta, prefs.meta ?? {});
+    Object.assign(base.wordpress, prefs.wordpress ?? {});
   }
   return base;
+}
+
+/** A platform's on/off choice from another post, without its custom text or media selection. */
+function emptyPlatformConfigFrom(cfg: PlatformConfig): PlatformConfig {
+  return { ...emptyPlatformConfig(cfg.enabled), includeLink: cfg.includeLink };
 }
 
 function mergeDraft(saved: Partial<Draft>): Draft {
@@ -68,6 +75,7 @@ function mergeDraft(saved: Partial<Draft>): Draft {
     platforms: { ...base.platforms, ...saved.platforms },
     youtube: { ...base.youtube, ...saved.youtube },
     meta: { ...base.meta, ...saved.meta },
+    wordpress: { ...base.wordpress, ...saved.wordpress },
   };
 }
 
@@ -98,6 +106,7 @@ export function useBatch() {
       enabled: Object.fromEntries(Object.entries(d.platforms).map(([k, v]) => [k, v.enabled])),
       youtube: { postType: d.youtube.postType, channel: d.youtube.channel, audience: d.youtube.audience, visibility: d.youtube.visibility, advanceToVisibilityStep: d.youtube.advanceToVisibilityStep },
       meta: { confirmDestinations: d.meta.confirmDestinations, pages: d.meta.pages, videoAs: d.meta.videoAs },
+      wordpress: { postType: d.wordpress.postType, categories: d.wordpress.categories, options: d.wordpress.options },
     };
     safeSet(() => localStorage, PREFS_KEY, prefs);
   }, [posts, active]);
@@ -136,6 +145,32 @@ export function useBatch() {
       return [...prev, post];
     });
   }, [nextTitle]);
+
+  /**
+   * One new Post per item captured from WhatsApp: its caption and image, with Post 1's platforms
+   * and settings (not its text, title or tags). The post you're editing stays selected.
+   */
+  const addIncoming = useCallback(
+    (items: { text: string; media: Draft['media'][number] }[]) => {
+      if (!items.length) return;
+      setPosts((prev) => {
+        const template = prev[0].draft;
+        const added: BatchPost[] = [];
+        for (const item of items) {
+          const draft = freshDraft();
+          draft.sharedText = item.text;
+          draft.media = [item.media];
+          draft.platforms = Object.fromEntries(Object.entries(template.platforms).map(([k, v]) => [k, emptyPlatformConfigFrom(v)])) as Draft['platforms'];
+          draft.youtube = { ...template.youtube, title: '' };
+          draft.meta = structuredClone(template.meta);
+          draft.wordpress = { ...structuredClone(template.wordpress), title: '', tags: '' };
+          added.push({ id: newId(), title: nextTitle([...prev, ...added]), draft });
+        }
+        return [...prev, ...added];
+      });
+    },
+    [nextTitle],
+  );
 
   const duplicatePost = useCallback(
     (id: string) => {
@@ -176,6 +211,7 @@ export function useBatch() {
     updatePlatform,
     updateAll,
     addPost,
+    addIncoming,
     duplicatePost,
     removePost,
     renamePost,

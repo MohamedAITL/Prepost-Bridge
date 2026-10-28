@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { emptyDraft, type Draft, type MediaItem } from '../shared/types';
-import { appendLink, batchProblems, buildDestinationContent, graphemeLength, planBatch, planJobs, xWeightedLength } from '../shared/validation';
+import { appendLink, batchProblems, buildDestinationContent, graphemeLength, planBatch, planJobs, wordpressArticle, xWeightedLength } from '../shared/validation';
 
 const img = (id: string, extra: Partial<MediaItem> = {}): MediaItem => ({ id, name: `${id}.jpg`, mime: 'image/jpeg', size: 100_000, kind: 'image', source: 'upload', ...extra });
 const vid = (id: string, extra: Partial<MediaItem> = {}): MediaItem => ({ id, name: `${id}.mp4`, mime: 'video/mp4', size: 5_000_000, kind: 'video', source: 'upload', durationSec: 30, ...extra });
@@ -227,4 +227,48 @@ test('planBatch: posts with no platform selected are skipped', () => {
     ]).length,
     1,
   );
+});
+
+test('WordPress: title from the first line, "شوف تيفي" byline dropped, tags split on , and ،', () => {
+  const d = draftWith((x) => {
+    x.sharedText = 'عنوان الخبر\nشوف تيفي\nالفقرة الأولى\nالفقرة الثانية';
+    x.platforms.wordpress.enabled = true;
+    x.wordpress.tags = 'المغرب، شوف تيفي, أخبار';
+    x.link = { url: 'https://example.com/a', mode: 'append' };
+  });
+  assert.deepEqual(wordpressArticle(d), { title: 'عنوان الخبر', body: 'الفقرة الأولى\nالفقرة الثانية', tags: ['المغرب', 'شوف تيفي', 'أخبار'] });
+  const c = buildDestinationContent(d, 'wordpress');
+  assert.equal(c.title, 'عنوان الخبر');
+  assert.equal(c.text, 'الفقرة الأولى\nالفقرة الثانية', 'the link is never appended to an article');
+  assert.deepEqual(errors(d, 'wordpress'), []);
+  // An explicit Title keeps the whole text as the body.
+  d.wordpress.title = 'Titre';
+  assert.equal(wordpressArticle(d).body, 'عنوان الخبر\nشوف تيفي\nالفقرة الأولى\nالفقرة الثانية');
+  assert.equal(planJobs(d).at(-1)?.moduleId, 'wordpress');
+});
+
+test('WordPress: needs a title, body and tags; one image ≤ 4 MB; no video; a video article needs a YouTube link', () => {
+  const d = draftWith((x) => {
+    x.sharedText = 'Only a title';
+    x.platforms.wordpress.enabled = true;
+  });
+  const errs = errors(d, 'wordpress');
+  assert.ok(errs.some((m) => /article body/.test(m)));
+  assert.ok(errs.some((m) => /at least one tag/.test(m)));
+  assert.ok(!errs.some((m) => /^Nothing to post/.test(m)));
+  d.sharedText = 'Title\nBody';
+  d.wordpress.tags = 'a';
+  d.media = [img('big', { size: 5 * 1024 * 1024 }), img('two')];
+  assert.ok(errors(d, 'wordpress').some((m) => /at most 1 image/.test(m)));
+  assert.ok(errors(d, 'wordpress').some((m) => /allows up to 4.0 MB/.test(m)));
+  d.media = [vid('v')];
+  assert.ok(errors(d, 'wordpress').some((m) => /does not accept videos/.test(m)));
+  d.media = [];
+  d.wordpress = { ...d.wordpress, postType: 'program', categories: ['بوز'], options: [] };
+  d.link = { url: 'https://example.com/not-youtube', mode: 'append' };
+  assert.ok(errors(d, 'wordpress').some((m) => /YouTube link/.test(m)));
+  d.link.url = 'https://youtu.be/abc';
+  assert.deepEqual(errors(d, 'wordpress'), []);
+  d.wordpress.categories = ['سياسة'];
+  assert.ok(errors(d, 'wordpress').some((m) => /Not a WordPress choice/.test(m)), 'a news section on a video article');
 });

@@ -155,6 +155,14 @@ class CdpRelay extends EventEmitter {
         this.sendToClient({ method, params, sessionId });
         break;
       }
+      case 'whatsappDraft': {
+        // An image+caption captured from WhatsApp Web; the extension deletes it from its queue only
+        // after this acknowledgement.
+        const ws = this.extWs;
+        const reply = (result: { ok: boolean; duplicate?: boolean; error?: string }) => ws?.send(JSON.stringify({ type: 'whatsappAck', ref: msg.ref, ...result }));
+        this.emit('whatsappDraft', msg.draft, reply);
+        break;
+      }
       case 'detached':
       case 'tabClosed': {
         const entry = this.entryForTab(Number(msg.tabId));

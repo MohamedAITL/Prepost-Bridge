@@ -8,6 +8,7 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser } from 'playwright';
 import { metaModule, publishedDialogShown } from '../server/platforms/meta';
+import { wordpressModule } from '../server/platforms/wordpress';
 import { xModule } from '../server/platforms/x';
 import { youtubeStudioModule } from '../server/platforms/youtubeStudio';
 import { testContext } from './harness';
@@ -130,6 +131,79 @@ test('Meta Reel: the "Reel processing … will be published" dialog counts as ac
   const page = await context.newPage();
   await page.setContent('<div role="dialog"><h3>Reel processing</h3><p>Once your reel finishes processing, it will be published and you will be notified.</p></div>');
   assert.equal(await publishedDialogShown(page), true);
+  await context.close();
+});
+
+const WP_ADMIN = 'https://0561102b93f7daa97.chouftv.ma/cms/wp-admin/';
+const WP_NEW_POST = `<!doctype html><meta charset="utf-8">
+<div id="wpadminbar">admin</div>
+<form id="post" onsubmit="return false">
+  <input type="hidden" id="post_ID" value="123">
+  <input type="hidden" id="original_post_status" value="auto-draft">
+  <input type="text" id="title">
+  <textarea id="content"></textarea>
+  <div class="postbox"><h2 class="hndle">عنوان الفيسبوك</h2><div class="inside"><input type="text" id="fb"></div></div>
+  <div id="tagsdiv-post_tag"><input class="newtag" type="text"><input type="button" class="tagadd" value="Add"><ul class="tagchecklist"></ul></div>
+  <div id="options">${['يظهر في الصفحة الرئيسية', 'شريط الأخبار'].map((n) => `<label><input type="checkbox"> ${n}</label>`).join('')}</div>
+  <ul id="categorychecklist">${['سياسة', 'مجتمع', 'حوادث وحقوق', 'أخبار', 'دولي', 'فن وثقافة', 'اقتصاد'].map((n) => `<li><label class="selectit"><input type="checkbox" ${n === 'أخبار' ? 'checked' : ''}> ${n}</label></li>`).join('')}</ul>
+  <ul id="categorychecklist-pop" style="display:none"><li><label class="selectit"><input type="checkbox" id="pop-politics"> سياسة</label></li></ul>
+  <input type="hidden" id="_thumbnail_id" value="-1">
+  <input type="submit" id="publish" value="Publish">
+</form>
+<script>
+  window.published = false;
+  window._wpPluploadSettings = { defaults: { multipart_params: { _wpnonce: 'nonce' } } };
+  window.wp = { media: { featuredImage: { set: (id) => setTimeout(() => { document.querySelector('#_thumbnail_id').value = id; }, 100) } } };
+  document.querySelector('.tagadd').addEventListener('click', () => {
+    const input = document.querySelector('.newtag');
+    for (const t of input.value.split(',')) if (t.trim()) document.querySelector('.tagchecklist').insertAdjacentHTML('beforeend', '<li>' + t + '</li>');
+    input.value = '';
+  });
+  document.querySelector('#publish').addEventListener('click', () => { window.published = true; location.href = '${WP_ADMIN}post.php?post=123&action=edit'; });
+</script>`;
+const WP_PUBLISHED = `<!doctype html><meta charset="utf-8"><div id="wpadminbar">admin</div>
+<input type="hidden" id="post_ID" value="123"><input type="hidden" id="original_post_status" value="publish"><input type="submit" id="publish" value="Update">`;
+
+test('WordPress module fills a Chouf article (title, body, Facebook title, tags, sections, featured image) and publishes only with auto-publish on', async () => {
+  const context = await browser.newContext();
+  let uploads = 0;
+  await context.route('https://0561102b93f7daa97.chouftv.ma/**', (route) => {
+    const url = route.request().url();
+    if (url.endsWith('/admin-ajax.php')) {
+      uploads++;
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: { id: 77 } }) });
+    }
+    return route.fulfill({ contentType: 'text/html', body: url.includes('/post.php') ? WP_PUBLISHED : WP_NEW_POST });
+  });
+  const page = await context.newPage();
+  const content = {
+    targets: ['wordpress' as const],
+    title: 'عنوان الخبر',
+    text: 'الفقرة الأولى <b>\nالفقرة الثانية',
+    media: [{ item: { id: '1', name: 'a.png', mime: 'image/png', size: PNG.length, kind: 'image' as const, source: 'upload' as const }, path: path.join(tmp, 'a.png') }],
+    wordpress: { postType: 'press' as const, tags: ['المغرب', 'شوف تيفي'], categories: ['سياسة'], options: ['يظهر في الصفحة الرئيسية', 'شريط الأخبار'], videoUrl: '' },
+  };
+
+  const off = testContext(page, content, false);
+  await wordpressModule.prepare(off.ctx);
+  assert.equal(await page.inputValue('#title'), 'عنوان الخبر');
+  assert.equal(await page.inputValue('#content'), '<p>الفقرة الأولى &lt;b&gt;</p>\n<p>الفقرة الثانية</p>', 'paragraphs, HTML escaped');
+  assert.equal(await page.inputValue('#fb'), 'عنوان الخبر');
+  assert.equal(await page.locator('.tagchecklist li').count(), 2);
+  assert.equal(await page.getByLabel('سياسة', { exact: true }).first().isChecked(), true);
+  assert.equal(await page.isChecked('#pop-politics'), false, 'the hidden "Most used" copy is left alone');
+  assert.equal(await page.getByLabel('أخبار', { exact: true }).isChecked(), false, 'an unwanted pre-ticked section is unticked');
+  assert.equal(await page.getByLabel('شريط الأخبار', { exact: true }).isChecked(), true);
+  assert.equal(await page.inputValue('#_thumbnail_id'), '77');
+  assert.equal(uploads, 1);
+  assert.deepEqual(off.checks.filter((c) => c.state !== 'pass'), [], JSON.stringify(off.checks));
+  assert.equal(await page.evaluate(() => (window as unknown as { published: boolean }).published), false, 'prepare never publishes');
+
+  await assert.rejects(wordpressModule.publish(off.ctx), /auto-publish is off/);
+  const on = testContext(page, content, true);
+  await wordpressModule.publish(on.ctx);
+  assert.ok(page.url().includes('/post.php'));
+  assert.deepEqual(on.checks.find((c) => c.label === 'Published on WordPress'), { label: 'Published on WordPress', state: 'pass', detail: 'https://chouftv.ma/press/123.html' });
   await context.close();
 });
 

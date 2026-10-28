@@ -14,6 +14,7 @@ import { config } from './config';
 import { automationManager, BatchFailure, ValidationFailure } from './services/automationManager';
 import { parseBatch, parseDraft, parseMetaPages, parseYouTubeChannels } from './services/contentValidator';
 import { readSettings, writeSettings } from './utils/settings';
+import { incoming } from './services/incoming';
 import { MediaError, mediaStore } from './services/mediaStore';
 import { logger } from './utils/logger';
 
@@ -168,7 +169,7 @@ app.post(
   '/api/browser/open',
   asyncRoute(async (req, res) => {
     // Only fixed, known platform pages can be opened; no user-supplied URLs.
-    const { platform } = z.object({ platform: z.enum(['meta', 'x', 'youtube', 'tiktok']) }).parse(req.body);
+    const { platform } = z.object({ platform: z.enum(['meta', 'x', 'youtube', 'tiktok', 'wordpress']) }).parse(req.body);
     await automationManager.openPlatform(platform);
     res.json(browserManager.state());
   }),
@@ -243,6 +244,21 @@ app.post(
   }),
 );
 
+// ---------- posts captured from WhatsApp (via the Prepost Bridge extension) ----------
+app.get('/api/incoming', (_req, res) => res.json({ count: incoming.count() }));
+// POST so a stray GET can't consume them; each item goes to exactly one dashboard.
+app.post('/api/incoming/claim', (_req, res) => res.json({ items: incoming.claim() }));
+
+cdpRelay.on('whatsappDraft', (draft: unknown, reply: (r: { ok: boolean; duplicate?: boolean; error?: string }) => void) => {
+  incoming
+    .add(draft)
+    .then((r) => reply({ ok: true, duplicate: r === 'duplicate' }))
+    .catch((e) => {
+      logger.warn('whatsapp', `Refused a WhatsApp item: ${(e as Error).message}`);
+      reply({ ok: false, error: (e as Error).message });
+    });
+});
+
 app.get('/api/logs', (_req, res) => res.json(logger.recent(300)));
 
 // ---------- live updates (Server-Sent Events) ----------
@@ -254,15 +270,19 @@ app.get('/api/events', (req, res) => {
   const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   send('jobs', automationManager.list());
   send('browser', browserManager.state());
+  send('incoming', incoming.count());
   const onJobs = (jobs: unknown) => send('jobs', jobs);
   const onBrowser = (state: unknown) => send('browser', state);
+  const onIncoming = (count: number) => send('incoming', count);
   automationManager.on('change', onJobs);
   browserManager.on('change', onBrowser);
+  incoming.on('change', onIncoming);
   const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
   req.on('close', () => {
     clearInterval(ping);
     automationManager.off('change', onJobs);
     browserManager.off('change', onBrowser);
+    incoming.off('change', onIncoming);
   });
 });
 

@@ -7,6 +7,7 @@ import {
   type Draft,
   type MediaItem,
   type ModuleId,
+  WORDPRESS_CHOICES,
 } from './types';
 
 export interface Issue {
@@ -110,7 +111,8 @@ export function baseText(draft: Draft, d: DestinationId): string {
 export function finalText(draft: Draft, d: DestinationId): string {
   const cfg = draft.platforms[d];
   let text = baseText(draft, d);
-  if (draft.link.mode === 'append' && cfg.includeLink && isValidHttpUrl(draft.link.url)) {
+  // A WordPress article never gets the link appended (a video article takes it as its Video URL).
+  if (d !== 'wordpress' && draft.link.mode === 'append' && cfg.includeLink && isValidHttpUrl(draft.link.url)) {
     text = appendLink(text, draft.link.url);
   }
   return text;
@@ -247,7 +249,60 @@ export function metaMirror(draft: Draft): Draft {
   return { ...draft, platforms: { ...draft.platforms, instagram: { ...draft.platforms.facebook } } };
 }
 
+const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'www.youtu.be', 'youtube-nocookie.com', 'www.youtube-nocookie.com'];
+
+export function isYouTubeUrl(value: string): boolean {
+  try {
+    const u = new URL(value.trim());
+    return (u.protocol === 'https:' || u.protocol === 'http:') && YOUTUBE_HOSTS.includes(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The Chouf News Desk text format: the title (or the WordPress Title field), an optional "شوف تيفي"
+ * byline line, then the body. Tags come from the Tags field.
+ */
+export function wordpressArticle(draft: Draft): { title: string; body: string; tags: string[] } {
+  const lines = baseText(draft, 'wordpress').split(/\r?\n/);
+  const dropBlank = () => {
+    while (lines.length && !lines[0].trim()) lines.shift();
+  };
+  let title = draft.wordpress.title.trim();
+  if (!title) {
+    dropBlank();
+    title = (lines.shift() ?? '').trim();
+  }
+  dropBlank();
+  if (lines[0]?.trim() === 'شوف تيفي') lines.shift();
+  const body = lines.join('\n').trim();
+  const tags = draft.wordpress.tags.split(/[,،]/).map((t) => t.trim()).filter(Boolean);
+  return { title, body, tags };
+}
+
+function buildWordPress(draft: Draft): DestinationContent {
+  const result = buildSingle(draft, 'wordpress');
+  const wp = draft.wordpress;
+  const { title, body, tags } = wordpressArticle(draft);
+  const choices = WORDPRESS_CHOICES[wp.postType];
+  // Replaced by the more precise title/body messages below.
+  const issues = result.issues.filter((i) => !i.message.startsWith('Nothing to post'));
+  if (!title) issues.push({ level: 'error', message: 'WordPress needs a title: fill Title, or put it on the first line of the text.' });
+  if (!body) issues.push({ level: 'error', message: 'WordPress needs the article body (the text under the title line).' });
+  if (!tags.length) issues.push({ level: 'error', message: 'WordPress needs at least one tag.' });
+  const unknown = [...wp.categories.filter((c) => !choices.categories.includes(c)), ...wp.options.filter((o) => !choices.options.includes(o))];
+  if (unknown.length) issues.push({ level: 'error', message: `Not a WordPress choice for this type: ${unknown.join(', ')}.` });
+  if (wp.postType === 'program') {
+    const url = draft.link.url.trim();
+    if (url && !isYouTubeUrl(url)) issues.push({ level: 'error', message: 'A WordPress video needs a YouTube link in Link.' });
+    else if (!url) issues.push({ level: 'warning', message: 'No YouTube link in Link: the article\'s Video URL stays empty.' });
+  }
+  return { ...result, title, text: body, textLength: graphemeLength(body), issues };
+}
+
 export function buildDestinationContent(draft: Draft, d: DestinationId): DestinationContent {
+  if (d === 'wordpress') return buildWordPress(draft);
   if (d !== 'facebook') return buildSingle(draft, d);
   const result = buildSingle(draft, 'facebook');
   if (draft.platforms.facebook.enabled && draft.meta.pages.length === 0) {
@@ -291,7 +346,7 @@ export function planJobs(draft: Draft): JobPlan[] {
       plans.push({ moduleId: 'meta', targets: page.instagram ? ['facebook', 'instagram'] : ['facebook'], metaPage: page.name });
     }
   }
-  for (const d of ['x', 'youtube', 'tiktok'] as const) if (enabled.includes(d)) plans.push({ moduleId: d, targets: [d] });
+  for (const d of ['x', 'youtube', 'tiktok', 'wordpress'] as const) if (enabled.includes(d)) plans.push({ moduleId: d, targets: [d] });
   return plans;
 }
 
