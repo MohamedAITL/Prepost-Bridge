@@ -93,6 +93,8 @@ export interface YouTubeOptions {
   channel: string;
   title: string;
   audience: YouTubeAudience;
+  /** Thumbnail for YouTube only (a youtubeOnly image); wins over the post's shared video cover. */
+  thumbnailId: string | null;
   /** Only selected in the Visibility step; choosing it never publishes. */
   visibility: YouTubeVisibility;
   /** Click "Next" through Details → Video elements → Checks → Visibility (never Save/Publish). */
@@ -181,7 +183,7 @@ export function emptyDraft(): Draft {
       wordpress: emptyPlatformConfig(),
       whatsapp: emptyPlatformConfig(),
     },
-    youtube: { postType: 'video', channel: '', title: '', audience: 'unset', visibility: 'unset', advanceToVisibilityStep: true },
+    youtube: { postType: 'video', channel: '', title: '', thumbnailId: null, audience: 'unset', visibility: 'unset', advanceToVisibilityStep: true },
     meta: { pages: [], confirmDestinations: false, videoAs: 'reel' },
     wordpress: wordpressDefaults('press'),
     whatsapp: { channels: [] },

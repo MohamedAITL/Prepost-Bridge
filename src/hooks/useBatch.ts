@@ -165,7 +165,7 @@ export function useBatch() {
           draft.sharedText = item.text;
           draft.media = [item.media];
           draft.platforms = Object.fromEntries(Object.entries(template.platforms).map(([k, v]) => [k, emptyPlatformConfigFrom(v)])) as Draft['platforms'];
-          draft.youtube = { ...template.youtube, title: '' };
+          draft.youtube = { ...template.youtube, title: '', thumbnailId: null };
           draft.meta = structuredClone(template.meta);
           draft.wordpress = { ...structuredClone(template.wordpress), title: '', tags: '' };
           draft.whatsapp = structuredClone(template.whatsapp);

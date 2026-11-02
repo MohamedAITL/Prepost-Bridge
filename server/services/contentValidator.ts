@@ -52,6 +52,7 @@ const draftSchema = z.object({
     postType: z.enum(['video', 'post']),
     channel: z.string().max(200),
     title: z.string().max(1000),
+    thumbnailId: z.string().uuid().nullable().default(null),
     audience: z.enum(['unset', 'not_kids', 'kids']),
     visibility: z.enum(['unset', 'private', 'unlisted', 'public']),
     advanceToVisibilityStep: z.boolean(),

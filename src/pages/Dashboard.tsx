@@ -111,6 +111,7 @@ export function Dashboard() {
               ...d,
               media: mine,
               coverId: d.coverId && mineIds.has(d.coverId) ? d.coverId : null,
+              youtube: { ...d.youtube, thumbnailId: d.youtube.thumbnailId && mineIds.has(d.youtube.thumbnailId) ? d.youtube.thumbnailId : null },
               platforms: Object.fromEntries(Object.entries(d.platforms).map(([k, v]) => [k, v.mediaIds ? { ...v, mediaIds: v.mediaIds.filter((x) => mineIds.has(x)) } : v])) as typeof d.platforms,
             };
           }),
@@ -160,7 +161,7 @@ export function Dashboard() {
   }, []);
 
   const onFiles = useCallback(
-    (files: File[], opts: { asCover?: boolean; youtubeOnly?: boolean } = {}) => {
+    (files: File[], opts: { asCover?: boolean; youtubeOnly?: boolean; youtubeThumbnail?: boolean } = {}) => {
       for (const file of files) {
         const key = `${file.name}-${file.size}-${Math.random()}`;
         setPending((p) => [...p, { key, name: file.name, progress: 0 }]);
@@ -168,7 +169,12 @@ export function Dashboard() {
           try {
             const hints = await probeMedia(file);
             const item = await api.uploadMedia(file, hints, (progress) => setPending((p) => p.map((x) => (x.key === key ? { ...x, progress } : x))));
-            update((d) => ({ ...d, media: [...d.media, opts.youtubeOnly ? { ...item, youtubeOnly: true } : item], coverId: opts.asCover && item.kind === 'image' ? item.id : d.coverId }));
+            update((d) =>
+              opts.youtubeThumbnail
+                ? // Replaces the previous thumbnail, which would otherwise count as YouTube media.
+                  { ...d, media: [...d.media.filter((m) => m.id !== d.youtube.thumbnailId), { ...item, youtubeOnly: true }], youtube: { ...d.youtube, thumbnailId: item.id } }
+                : { ...d, media: [...d.media, opts.youtubeOnly ? { ...item, youtubeOnly: true } : item], coverId: opts.asCover && item.kind === 'image' ? item.id : d.coverId },
+            );
             setPending((p) => p.filter((x) => x.key !== key));
           } catch (e) {
             setPending((p) => p.map((x) => (x.key === key ? { ...x, error: (e as Error).message } : x)));
@@ -188,6 +194,7 @@ export function Dashboard() {
         ...d,
         media: d.media.filter((m) => m.id !== id),
         coverId: d.coverId === id ? null : d.coverId,
+        youtube: d.youtube.thumbnailId === id ? { ...d.youtube, thumbnailId: null } : d.youtube,
         platforms: Object.fromEntries(Object.entries(d.platforms).map(([k, v]) => [k, v.mediaIds ? { ...v, mediaIds: v.mediaIds.filter((x) => x !== id) } : v])) as typeof d.platforms,
       }));
       // Keep the file in the engine while another post (e.g. a duplicate) still references it.
@@ -223,7 +230,7 @@ export function Dashboard() {
         link: { url: '', mode: d.link.mode },
         media: [],
         coverId: null,
-        youtube: { ...d.youtube, title: '' },
+        youtube: { ...d.youtube, title: '', thumbnailId: null },
         platforms: Object.fromEntries(Object.entries(d.platforms).map(([k, v]) => [k, { ...emptyPlatformConfig(v.enabled) }])) as typeof d.platforms,
       }));
       setPending([]);
@@ -427,6 +434,7 @@ export function Dashboard() {
             onPlatformChange={updatePlatform}
             onDraftChange={update}
             onYouTubeFiles={(files) => onFiles(files, { youtubeOnly: true })}
+            onYouTubeThumbnail={(file) => onFiles([file], { youtubeThumbnail: true })}
             onRemoveMedia={removeMedia}
           />
         </section>

@@ -1,5 +1,5 @@
 import type { Locator, Page } from 'playwright';
-import { fieldContains, findAttached, fillTextField, openUrl, pollUntil, readFieldText, setFiles } from '../automation/helpers';
+import { fieldContains, fillTextField, openUrl, pollUntil, readFieldText } from '../automation/helpers';
 import { safeClick } from '../automation/safeActions';
 import { detectSessionWith, openWithSession } from '../automation/session';
 import { WA } from './selectors/whatsapp';
@@ -87,21 +87,30 @@ export const whatsappModule: PlatformModule = {
     const box = await ctx.step('Open the channel', () => openChannel(page, channel));
     ctx.check(`Channel "${channel}"`, 'pass');
 
+    const boxLabel = (await box.getAttribute('aria-label')) ?? '';
+    const caption = page.locator(`[contenteditable="true"]:not([aria-label=${JSON.stringify(boxLabel)}])`).filter({ visible: true }).first();
+
     if (content.media.length) {
       ctx.setStatus('uploading', 'Attaching the media…', 45);
       await ctx.step('Open the attach menu', () => safeClick(page.locator(WA.attachButton).first(), 'Attach'));
-      const input = await ctx.step('Locate the file input', () => findAttached(page, WA.fileInput, 10_000));
-      if (!input) throw new Error('WhatsApp did not offer a file input.');
-      await ctx.step('Attach the file', () => setFiles(input, content.media.map((m) => m.path)));
-      const shown = await pollUntil(async () => (await sendButton(page).count()) > 0, 30_000);
-      ctx.check(`Media attached (${content.media.length})`, shown ? 'pass' : 'fail');
+      // The item's own picker: the menu also holds the sticker maker's file input, which squares the image.
+      const item = page.getByRole('menuitem', { name: WA.photosAndVideos });
+      await ctx.step('Attach the file', async () => {
+        const chooser = page.waitForEvent('filechooser', { timeout: 15_000 });
+        chooser.catch(() => undefined); // if the click fails, this must not become an unhandled rejection
+        await safeClick(item, 'Photos and videos');
+        await (await chooser).setFiles(content.media.map((m) => m.path));
+      });
+      // The message box stays underneath the tray: only the tray's own box makes a caption.
+      const shown = await caption.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true, () => false);
+      ctx.check(`Media attached (${content.media.length})`, shown ? 'pass' : 'fail', shown ? undefined : "WhatsApp's media tray did not open; check the tab.");
     }
 
     if (content.text) {
       ctx.setStatus('filling', 'Filling the text…', 60);
-      // With media attached, this same box takes the caption.
-      await ctx.step('Fill the text', () => fillTextField(page, box, content.text));
-      ctx.check('Text matches', (await fieldContains(box, content.text)) ? 'pass' : 'fail');
+      const field = content.media.length ? caption : box;
+      await ctx.step('Fill the text', () => fillTextField(page, field, content.text));
+      ctx.check('Text matches', (await fieldContains(field, content.text)) ? 'pass' : 'fail');
     }
 
     ctx.setStatus('verifying', 'Verifying…', 90);

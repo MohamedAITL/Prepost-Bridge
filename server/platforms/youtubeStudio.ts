@@ -350,7 +350,8 @@ export const youtubeStudioModule: PlatformModule = {
           await ctx.snapshot('youtube-thumbnail');
         } else {
           await thumbInput.setInputFiles([content.thumbnail.path], { timeout: 20_000 });
-          const shown = await findVisible(page, YT.thumbnailPreview, 20_000);
+          const uploaded = page.getByRole('button', { name: YT.uploadedThumbnail });
+          const shown = await pollUntil(async () => (await uploaded.count()) > 0 || !!(await findVisible(page, YT.thumbnailPreview, 0)), 20_000);
           ctx.check('Custom thumbnail', shown ? 'pass' : 'unverified', shown ? undefined : 'Could not confirm the thumbnail; check it in the dialog.');
           if (!shown) await ctx.snapshot('youtube-thumbnail');
         }

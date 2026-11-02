@@ -238,19 +238,30 @@ const WA_FIXTURE = `<!doctype html><meta charset="utf-8">
   <header><button id="title"></button></header>
   <footer>
     <button aria-haspopup="menu" aria-label="Joindre">+</button>
-    <input type="file" accept="image/*,video/mp4" style="display:none">
+    <div role="menu" hidden>
+      <div role="menuitem" id="photos">Photos et vidéos<input id="photo-input" type="file" accept="image/*,video/mp4" style="display:none"></div>
+      <div role="menuitem">Nouveau sticker<input id="sticker-input" type="file" accept="image/*" style="display:none"></div>
+    </div>
     <div role="textbox" aria-label="Écrivez un message" contenteditable="true" style="min-height:30px;border:1px solid"></div>
     <button id="send" aria-label="Envoyer" hidden>Send</button>
   </footer>
+  <div id="tray" hidden><div id="caption" aria-label="Entrez une actu" contenteditable="true" style="min-height:30px;border:1px solid"></div></div>
 </div>
 <script>
   window.sent = [];
+  window.stickerUsed = false;
   const box = document.querySelector('[role=textbox]'), send = document.querySelector('#send'), footer = document.querySelector('footer');
-  const refresh = () => { send.hidden = !box.textContent.trim() && !window.tray; };
-  box.addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
-  box.addEventListener('input', refresh);
-  document.querySelector('input').addEventListener('change', () => { window.tray = true; send.setAttribute('aria-label', 'Envoyer 1 élément sélectionné'); refresh(); });
-  send.addEventListener('click', () => { window.sent.push(box.textContent); box.textContent = ''; window.tray = false; send.setAttribute('aria-label', 'Envoyer'); refresh(); });
+  const caption = document.querySelector('#caption'), tray = document.querySelector('#tray'), menu = document.querySelector('[role=menu]');
+  const refresh = () => { send.hidden = !box.textContent.trim() && tray.hidden; };
+  for (const el of [box, caption]) {
+    el.addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
+    el.addEventListener('input', refresh);
+  }
+  document.querySelector('[aria-haspopup]').addEventListener('click', () => { menu.hidden = false; });
+  document.querySelector('#photos').addEventListener('click', () => document.querySelector('#photo-input').click());
+  document.querySelector('#sticker-input').addEventListener('change', () => { window.stickerUsed = true; });
+  document.querySelector('#photo-input').addEventListener('change', () => { tray.hidden = false; menu.hidden = true; send.setAttribute('aria-label', 'Envoyer 1 élément sélectionné'); refresh(); });
+  send.addEventListener('click', () => { window.sent.push(tray.hidden ? box.textContent : 'media+' + caption.textContent); box.textContent = caption.textContent = ''; tray.hidden = true; send.setAttribute('aria-label', 'Envoyer'); refresh(); });
   document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => {
     document.querySelector('#main').hidden = false;
     document.querySelector('#title').textContent = b.textContent + ' Chaîne vérifiée';
@@ -276,13 +287,16 @@ test('WhatsApp: lists only channels you can post in; prepares without sending; S
   await whatsappModule.prepare(off.ctx);
   assert.deepEqual(off.checks.filter((c) => c.state !== 'pass'), [], JSON.stringify(off.checks));
   assert.ok((await page.locator('#title').innerText()).startsWith('ChoufTV Chaîne'), 'the exact channel, not "ChoufTV Live"');
+  assert.equal(await page.evaluate(() => (window as unknown as { stickerUsed: boolean }).stickerUsed), false, 'never the sticker maker: it forces the image square');
+  assert.equal(await page.locator('#caption').innerText(), 'خبر عاجل 🚨', 'the caption goes in the media tray');
+  assert.equal(await page.locator('[role=textbox]').innerText(), '', 'not in the message box behind it');
   assert.deepEqual(await sent(), []);
   await assert.rejects(whatsappModule.publish(off.ctx), /auto-publish is off/);
   assert.deepEqual(await sent(), []);
 
   const on = testContext(page, content, true);
   await whatsappModule.publish(on.ctx);
-  assert.deepEqual(await sent(), ['خبر عاجل 🚨']);
+  assert.deepEqual(await sent(), ['media+خبر عاجل 🚨']);
   assert.ok(on.checks.some((c) => c.label === 'Sent to the channel' && c.state === 'pass'));
   await context.close();
 });
@@ -364,7 +378,7 @@ test('YouTube module uploads, fills title/description, sets audience, reaches Vi
     title: 'Mon titre — عنوان',
     media: [{ item: { id: 'v', name: 'clip.mp4', mime: 'video/mp4', size: 24, kind: 'video', source: 'upload' }, path: path.join(tmp, 'clip.mp4') }],
     thumbnail: null,
-    youtube: { postType: 'video', channel: '', title: 'Mon titre — عنوان', audience: 'not_kids', visibility: 'unlisted', advanceToVisibilityStep: true },
+    youtube: { postType: 'video', channel: '', title: 'Mon titre — عنوان', thumbnailId: null, audience: 'not_kids', visibility: 'unlisted', advanceToVisibilityStep: true },
   });
   await youtubeStudioModule.prepare(ctx);
   assert.equal(await page.locator('#title-textarea #textbox').innerText(), 'Mon titre — عنوان');
@@ -420,7 +434,7 @@ test('YouTube post mode: opens Posts tab, fills text, attaches images, never cli
     text: 'Annonce 📣\nالسطر الثاني',
     media: [png('1', 'a.png'), png('2', 'b.png')],
     thumbnail: null,
-    youtube: { postType: 'post', channel: '', title: '', audience: 'unset', visibility: 'unset', advanceToVisibilityStep: false },
+    youtube: { postType: 'post', channel: '', title: '', thumbnailId: null, audience: 'unset', visibility: 'unset', advanceToVisibilityStep: false },
   });
   await youtubeStudioModule.prepare(ctx);
   assert.match(page.url(), /\/channel\/UCtest\/posts$/);

@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from 'react';
-import { FilmStripIcon, TrashIcon, UploadSimpleIcon } from '@phosphor-icons/react';
+import { FilmStripIcon, ImageSquareIcon, TrashIcon, UploadSimpleIcon } from '@phosphor-icons/react';
 import { buildDestinationContent, graphemeLength, wordpressArticle, youtubeTitle } from '../../shared/validation';
 import { YOUTUBE_TITLE_LIMIT } from '../../shared/rules';
 import { WORDPRESS_CHOICES, wordpressDefaults } from '../../shared/types';
@@ -15,6 +15,7 @@ interface Props {
   onChange: (patch: Partial<PlatformConfig>) => void;
   onDraftChange: (fn: (d: Draft) => Draft) => void;
   onYouTubeFiles: (files: File[]) => void;
+  onYouTubeThumbnail: (file: File) => void;
   onRemoveMedia: (id: string) => void;
 }
 
@@ -31,8 +32,9 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
   );
 }
 
-export function PlatformConfigCard({ destination: d, draft, onChange, onDraftChange, onYouTubeFiles, onRemoveMedia }: Props) {
+export function PlatformConfigCard({ destination: d, draft, onChange, onDraftChange, onYouTubeFiles, onYouTubeThumbnail, onRemoveMedia }: Props) {
   const ytFileRef = useRef<HTMLInputElement>(null);
+  const ytThumbRef = useRef<HTMLInputElement>(null);
   const cfg = draft.platforms[d];
   const content = buildDestinationContent(draft, d);
   const selectedIds = cfg.mediaIds ?? draft.media.map((m) => m.id);
@@ -42,7 +44,8 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
   const textLabel = ytVideo ? 'Description' : d === 'tiktok' ? 'Caption' : d === 'wordpress' ? 'Article' : 'Text';
   // YouTube set to video upload, but this post only has images: offer the image-post type.
   const onlyImages = content.media.length > 0 && content.media.every((m) => m.kind === 'image');
-  const ytOwn = draft.media.filter((m) => m.youtubeOnly);
+  const ytOwn = draft.media.filter((m) => m.youtubeOnly && m.id !== draft.youtube.thumbnailId);
+  const ytThumb = draft.media.find((m) => m.id === draft.youtube.thumbnailId);
   const setYt = (patch: Partial<Draft['youtube']>) => onDraftChange((x) => ({ ...x, youtube: { ...x.youtube, ...patch } }));
   const setMeta = (patch: Partial<Draft['meta']>) => onDraftChange((x) => ({ ...x, meta: { ...x.meta, ...patch } }));
   const setWp = (patch: Partial<Draft['wordpress']>) => onDraftChange((x) => ({ ...x, wordpress: { ...x.wordpress, ...patch } }));
@@ -218,6 +221,46 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
               }}
             />
             <p className="muted small">{ytOwn.length ? 'YouTube uses this instead of the shared media. Other platforms never get it.' : 'Use a different file on YouTube in this same post. The upload progress shows under Photos and videos.'}</p>
+          </div>
+        )}
+
+        {ytVideo && (
+          <div className="field">
+            <span className="field-label">Thumbnail for YouTube only</span>
+            <div className="cover-box">
+              {ytThumb ? (
+                <img className="cover-thumb" src={api.mediaUrl(ytThumb)} alt="YouTube thumbnail" />
+              ) : (
+                <span className="cover-empty" aria-hidden>
+                  <ImageSquareIcon size={22} />
+                </span>
+              )}
+              <div className="cover-text">
+                <strong>YouTube thumbnail</strong>
+                <small>16:9, JPG, PNG or GIF, up to 2 MB. Used instead of the shared video cover.</small>
+              </div>
+              <div className="cover-actions">
+                <button type="button" className="btn small" onClick={() => ytThumbRef.current?.click()}>
+                  {ytThumb ? 'Change' : 'Upload thumbnail'}
+                </button>
+                {ytThumb && (
+                  <button type="button" className="btn small ghost" onClick={() => onRemoveMedia(ytThumb.id)}>
+                    Remove
+                  </button>
+                )}
+              </div>
+              <input
+                ref={ytThumbRef}
+                type="file"
+                hidden
+                accept="image/jpeg,image/png,image/gif"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onYouTubeThumbnail(file);
+                  e.target.value = '';
+                }}
+              />
+            </div>
           </div>
         )}
 

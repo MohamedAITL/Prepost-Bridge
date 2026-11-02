@@ -130,7 +130,7 @@ export function youtubeTitle(draft: Draft): string {
 
 export function selectedMedia(draft: Draft, d: DestinationId): MediaItem[] {
   const cfg = draft.platforms[d];
-  const youtubeOwn = d === 'youtube' ? draft.media.filter((m) => m.youtubeOnly) : [];
+  const youtubeOwn = d === 'youtube' ? draft.media.filter((m) => m.youtubeOnly && m.id !== draft.youtube.thumbnailId) : [];
   let items = youtubeOwn.length ? youtubeOwn : (cfg.mediaIds === null ? draft.media : cfg.mediaIds.map((id) => draft.media.find((m) => m.id === id)).filter((m): m is MediaItem => !!m)).filter((m) => !m.youtubeOnly);
   // The cover image is only ever used as a cover, never as post media.
   if (draft.coverId) items = items.filter((m) => m.id !== draft.coverId);
@@ -230,7 +230,8 @@ function buildSingle(draft: Draft, d: DestinationId): DestinationContent {
 
   // Cover / thumbnail for video posts.
   // A cover whose image is gone simply means "no custom cover".
-  const cover = draft.coverId ? (draft.media.find((m) => m.id === draft.coverId) ?? null) : null;
+  const coverId = (d === 'youtube' && draft.youtube.thumbnailId) || draft.coverId;
+  const cover = coverId ? (draft.media.find((m) => m.id === coverId) ?? null) : null;
   if (cover && videos.length && d !== 'instagram') {
     const supported = (d === 'youtube' && draft.youtube.postType === 'video') || d === 'tiktok' || (d === 'facebook' && draft.meta.videoAs === 'reel');
     const rule = COVER_RULES[d];

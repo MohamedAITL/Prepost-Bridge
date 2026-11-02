@@ -21,6 +21,8 @@ export const YT = {
   title: ['ytcp-uploads-dialog #title-textarea #textbox', 'ytcp-video-title #textbox', 'ytcp-uploads-dialog [contenteditable="true"][aria-label*="title" i]'],
   description: ['ytcp-uploads-dialog #description-textarea #textbox', 'ytcp-video-description #textbox', 'ytcp-uploads-dialog [contenteditable="true"][aria-label*="viewers" i]'],
   thumbnailInput: ['ytcp-uploads-dialog ytcp-thumbnails-compact-editor-uploader input[type="file"]', 'ytcp-uploads-dialog input#file-loader', 'ytcp-uploads-dialog input[type="file"][accept*="image"]'],
+  /** The button Studio shows once a custom thumbnail is in (seen 2026-11). */
+  uploadedThumbnail: /^(uploaded thumbnail|miniature ajoutée|.*الصورة المصغ)/i,
   thumbnailPreview: ['ytcp-thumbnails-compact-editor-uploader img[src^="blob:"]', 'ytcp-thumbnails-compact-editor img[src^="blob:"]', 'ytcp-uploads-dialog #still-picker img[src^="blob:"]'],
 
   audience: {

@@ -244,6 +244,31 @@ test('YouTube-only media replaces the shared media on YouTube and reaches no oth
   assert.deepEqual(buildDestinationContent(d, 'youtube').media.map((m) => m.id), ['shared']);
 });
 
+test('YouTube thumbnail: wins over the shared cover, on YouTube only, and is never posted as media', () => {
+  const d = draftWith((x) => {
+    x.sharedText = 'News';
+    x.media = [vid('shared'), img('cover'), vid('wide', { youtubeOnly: true }), img('thumb', { youtubeOnly: true })];
+    x.coverId = 'cover';
+    x.youtube.thumbnailId = 'thumb';
+    x.platforms.youtube.enabled = true;
+    x.platforms.tiktok.enabled = true;
+  });
+  const yt = buildDestinationContent(d, 'youtube');
+  assert.deepEqual(yt.media.map((m) => m.id), ['wide']);
+  assert.equal(yt.thumbnail?.id, 'thumb');
+  const tt = buildDestinationContent(d, 'tiktok');
+  assert.deepEqual(tt.media.map((m) => m.id), ['shared']);
+  assert.equal(tt.thumbnail?.id, 'cover');
+  // A thumbnail alone doesn't replace the shared video on YouTube.
+  d.media = d.media.filter((m) => m.id !== 'wide');
+  assert.deepEqual(buildDestinationContent(d, 'youtube').media.map((m) => m.id), ['shared']);
+  assert.equal(buildDestinationContent(d, 'youtube').thumbnail?.id, 'thumb');
+  // Without one, the shared cover applies as before (Remove deletes the image too).
+  d.youtube.thumbnailId = null;
+  d.media = d.media.filter((m) => m.id !== 'thumb');
+  assert.equal(buildDestinationContent(d, 'youtube').thumbnail?.id, 'cover');
+});
+
 test('planBatch: one job per post × platform, tagged with the post', () => {
   const p1 = draftWith((x) => {
     x.sharedText = 'Post one';

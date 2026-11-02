@@ -19,7 +19,8 @@ export const WA = {
   footer: '#main footer',
   header: '#main header',
   attachButton: 'footer button[aria-haspopup="menu"]',
-  fileInput: ['input[type="file"][accept*="video"]', 'input[type="file"][accept*="image"]'],
+  /** The attach menu's first item (it also has Camera, Poll, Quiz, New sticker…). */
+  photosAndVideos: /^(photos? (et|and|&) vid[ée]os?|الصور (و|&)\s?(ال)?فيديو)/i,
   /** Final submission control; pressed only with auto-publish on (PrepareContext.publishClick). */
   sendButton: /^(envoyer|send|إرسال)/i,
   /** Seen 2026-11: "Envoyer 1 élément sélectionné" while media waits in the tray. */
