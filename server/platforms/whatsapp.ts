@@ -83,6 +83,11 @@ export const whatsappModule: PlatformModule = {
       ctx.setStatus('needs_attention', 'An earlier update is waiting in WhatsApp', 20);
       await ctx.waitForUser('An update with media is still waiting to be sent in WhatsApp. Press Show tab, send it or close it there, and this one carries on.', { until: async () => !(await mediaTrayOpen(page)) });
     }
+    // Clicking and typing wait for screen frames, and a hidden tab draws none (seen in batches:
+    // "scrollIntoViewIfNeeded: Timeout"). Uploads take turns at being shown, so this can wait for one.
+    ctx.setStatus('preparing', 'Bringing the WhatsApp tab to the front…', 22);
+    await ctx.showTab('WhatsApp prepares the post');
+    await pollUntil(() => page.evaluate(() => document.visibilityState === 'visible'), 180_000, 500);
     ctx.setStatus('preparing', `Opening the channel "${channel}"…`, 25);
     const box = await ctx.step('Open the channel', () => openChannel(page, channel));
     ctx.check(`Channel "${channel}"`, 'pass');

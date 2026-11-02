@@ -353,6 +353,38 @@ test('YouTube Ad suitability: answered only when you confirmed it for this post'
   await page.close();
 });
 
+test('YouTube publish: a public video takes the second Publish, and only with auto-publish on', async () => {
+  const body = `<!doctype html><meta charset="utf-8"><style>ytcp-uploads-dialog, ytcp-uploads-dialog * { display: block; min-height: 10px; }</style>
+    <ytcp-uploads-dialog>
+      <ytcp-uploads-review>
+        <tp-yt-paper-radio-button name="PUBLIC" role="radio" aria-checked="true">Public</tp-yt-paper-radio-button>
+      </ytcp-uploads-review>
+      <ytcp-button id="done-button"><button>Publish</button></ytcp-button>
+    </ytcp-uploads-dialog>
+    <script>
+      window.published = 0;
+      document.querySelector('#done-button').addEventListener('click', () => {
+        document.body.insertAdjacentHTML('beforeend', '<div role="dialog"><button id="confirm">Publish</button></div>');
+        document.querySelector('#confirm').addEventListener('click', () => { window.published++; document.querySelector('ytcp-uploads-dialog').remove(); document.querySelector('[role=dialog]').remove(); });
+      });
+    </script>`;
+  const youtube = { postType: 'video' as const, channel: '', title: 'x', thumbnailId: null, adSuitabilityNone: false, audience: 'not_kids' as const, visibility: 'public' as const, advanceToVisibilityStep: true };
+  const content = { targets: ['youtube' as const], text: 'x', media: [], youtube };
+  const page = await browser.newPage();
+  const published = () => page.evaluate(() => (window as unknown as { published: number }).published);
+
+  await page.setContent(body);
+  await assert.rejects(youtubeStudioModule.publish(testContext(page, content, false).ctx), /auto-publish is off/);
+  assert.equal(await published(), 0);
+
+  await page.setContent(body);
+  const on = testContext(page, content, true);
+  await youtubeStudioModule.publish(on.ctx);
+  assert.equal(await published(), 1, 'the confirmation was pressed, once');
+  assert.ok(on.checks.some((c) => c.label === 'Video published' && c.state === 'pass'));
+  await page.close();
+});
+
 test('YouTube Studio counts as signed in from its address, even with nothing rendered yet', async () => {
   const context = await browser.newContext();
   // A hidden tab may leave Studio's custom elements without a size, so they never look "visible".
