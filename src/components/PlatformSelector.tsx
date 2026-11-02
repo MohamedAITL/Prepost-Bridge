@@ -10,6 +10,8 @@ interface Props {
   metaPagePicker?: ReactNode;
   /** Rendered inside the YouTube row when it's on (the channel choice). */
   youtubeChannelPicker?: ReactNode;
+  /** Rendered inside the WhatsApp row when it's on (the channel checkboxes). */
+  whatsappChannelPicker?: ReactNode;
 }
 
 const SUBTITLE: Record<DestinationId, string> = {
@@ -19,9 +21,10 @@ const SUBTITLE: Record<DestinationId, string> = {
   youtube: 'Video, Short or channel post',
   tiktok: 'Video or photos',
   wordpress: 'Chouf article: news or video',
+  whatsapp: 'Your WhatsApp Channels',
 };
 
-export function PlatformSelector({ platforms, onToggle, metaPagePicker, youtubeChannelPicker }: Props) {
+export function PlatformSelector({ platforms, onToggle, metaPagePicker, youtubeChannelPicker, whatsappChannelPicker }: Props) {
   return (
     <ul className="platform-list">
       {DESTINATIONS.map((d) => {
@@ -42,6 +45,7 @@ export function PlatformSelector({ platforms, onToggle, metaPagePicker, youtubeC
             </div>
             {d === 'facebook' && on && metaPagePicker}
             {d === 'youtube' && on && youtubeChannelPicker}
+            {d === 'whatsapp' && on && whatsappChannelPicker}
           </li>
         );
       })}

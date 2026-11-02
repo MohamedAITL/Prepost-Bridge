@@ -45,6 +45,8 @@ const draftSchema = z.object({
     youtube: platformConfig,
     tiktok: platformConfig,
     wordpress: platformConfig,
+    // Defaults: a dashboard from before WhatsApp Channels can still talk to this engine.
+    whatsapp: platformConfig.default({ enabled: false, useSharedText: true, customText: '', includeLink: true, mediaIds: null }),
   }),
   youtube: z.object({
     postType: z.enum(['video', 'post']),
@@ -63,6 +65,7 @@ const draftSchema = z.object({
     categories: z.array(z.string().max(100)).max(20),
     options: z.array(z.string().max(100)).max(20),
   }),
+  whatsapp: z.object({ channels: z.array(z.string().min(1).max(200)).max(50) }).default({ channels: [] }),
 });
 
 export function parseDraft(input: unknown): Draft {
@@ -73,6 +76,11 @@ export function parseYouTubeChannels(input: unknown) {
   const list = z.array(z.object({ name: z.string().trim().min(1).max(200), handle: z.string().trim().max(200) })).max(50).parse(input);
   const seen = new Set<string>();
   return list.filter((c) => !seen.has(c.name.toLowerCase()) && seen.add(c.name.toLowerCase()));
+}
+
+export function parseWhatsAppChannels(input: unknown): string[] {
+  const list = z.array(z.string().trim().min(1).max(200)).max(50).parse(input);
+  return [...new Set(list)];
 }
 
 export function parseBatch(input: unknown): import('../../shared/types').BatchPost[] {

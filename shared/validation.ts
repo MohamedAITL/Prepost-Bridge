@@ -31,6 +31,8 @@ export interface JobPlan {
   targets: DestinationId[];
   /** Meta only: the Facebook Page this job posts as. */
   metaPage?: string;
+  /** WhatsApp only: the Channel this job posts to. */
+  whatsappChannel?: string;
   /** Batch: which post this job belongs to. */
   postId?: string;
   postTitle?: string;
@@ -323,6 +325,11 @@ function buildWordPress(draft: Draft): DestinationContent {
 
 export function buildDestinationContent(draft: Draft, d: DestinationId): DestinationContent {
   if (d === 'wordpress') return buildWordPress(draft);
+  if (d === 'whatsapp') {
+    const result = buildSingle(draft, 'whatsapp');
+    if (draft.platforms.whatsapp.enabled && draft.whatsapp.channels.length === 0) result.issues.unshift({ level: 'error', message: 'Tick at least one channel under Post to → WhatsApp.' });
+    return result;
+  }
   if (d !== 'facebook') return buildSingle(draft, d);
   const result = buildSingle(draft, 'facebook');
   if (draft.platforms.facebook.enabled && draft.meta.pages.length === 0) {
@@ -368,6 +375,7 @@ export function planJobs(draft: Draft): JobPlan[] {
     }
   }
   for (const d of ['x', 'youtube', 'tiktok', 'wordpress'] as const) if (enabled.includes(d)) plans.push({ moduleId: d, targets: [d] });
+  if (enabled.includes('whatsapp')) for (const whatsappChannel of draft.whatsapp.channels) plans.push({ moduleId: 'whatsapp', targets: ['whatsapp'], whatsappChannel });
   return plans;
 }
 

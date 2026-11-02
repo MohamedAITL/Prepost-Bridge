@@ -8,6 +8,7 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser } from 'playwright';
 import { metaModule, publishedDialogShown } from '../server/platforms/meta';
+import { readWhatsAppChannels, whatsappModule } from '../server/platforms/whatsapp';
 import { wordpressModule } from '../server/platforms/wordpress';
 import { xModule } from '../server/platforms/x';
 import { youtubeStudioModule } from '../server/platforms/youtubeStudio';
@@ -222,6 +223,83 @@ test('WordPress module fills a Chouf article (title, body, Facebook title, tags,
   assert.ok(page.url().includes('/post.php'));
   assert.deepEqual(on.checks.find((c) => c.label === 'Published on WordPress'), { label: 'Published on WordPress', state: 'pass', detail: 'https://chouftv.ma/press/123.html' });
   assert.deepEqual(on.articles, [{ title: 'عنوان الخبر', url: 'https://chouftv.ma/press/123.html', published: true }], 'read from the permalink, on the public host');
+  await context.close();
+});
+
+const WA_FIXTURE = `<!doctype html><meta charset="utf-8">
+<button aria-label="Chaînes">Chaînes</button>
+<nav aria-label="Liste des chaînes">
+  <button aria-label="Chaîne ChoufTV Live">ChoufTV Live</button>
+  <button aria-label="Chaîne ChoufTV">ChoufTV</button>
+  <button aria-label="Chaîne MAP">MAP</button>
+</nav>
+<nav><button aria-label="Chaîne Suggestion">Follow me</button></nav>
+<div id="main" hidden>
+  <header><button id="title"></button></header>
+  <footer>
+    <button aria-haspopup="menu" aria-label="Joindre">+</button>
+    <input type="file" accept="image/*,video/mp4" style="display:none">
+    <div role="textbox" aria-label="Écrivez un message" contenteditable="true" style="min-height:30px;border:1px solid"></div>
+    <button id="send" aria-label="Envoyer" hidden>Send</button>
+  </footer>
+</div>
+<script>
+  window.sent = [];
+  const box = document.querySelector('[role=textbox]'), send = document.querySelector('#send'), footer = document.querySelector('footer');
+  const refresh = () => { send.hidden = !box.textContent.trim() && !window.tray; };
+  box.addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
+  box.addEventListener('input', refresh);
+  document.querySelector('input').addEventListener('change', () => { window.tray = true; send.setAttribute('aria-label', 'Envoyer 1 élément sélectionné'); refresh(); });
+  send.addEventListener('click', () => { window.sent.push(box.textContent); box.textContent = ''; window.tray = false; send.setAttribute('aria-label', 'Envoyer'); refresh(); });
+  document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelector('#main').hidden = false;
+    document.querySelector('#title').textContent = b.textContent + ' Chaîne vérifiée';
+    footer.hidden = b.textContent === 'MAP';
+  }));
+</script>`;
+
+async function whatsappPage() {
+  const context = await browser.newContext();
+  await context.route('https://web.whatsapp.com/**', (route) => route.fulfill({ contentType: 'text/html', body: WA_FIXTURE }));
+  return { context, page: await context.newPage() };
+}
+
+test('WhatsApp: lists only channels you can post in; prepares without sending; Send needs auto-publish', async () => {
+  const { context, page } = await whatsappPage();
+  assert.deepEqual(await readWhatsAppChannels(page), ['ChoufTV Live', 'ChoufTV']);
+
+  const media = [{ item: { id: '1', name: 'a.png', mime: 'image/png', size: PNG.length, kind: 'image' as const, source: 'upload' as const }, path: path.join(tmp, 'a.png') }];
+  const content = { targets: ['whatsapp' as const], text: 'خبر عاجل 🚨', media, whatsapp: { channel: 'ChoufTV' } };
+  const sent = () => page.evaluate(() => (window as unknown as { sent: string[] }).sent);
+
+  const off = testContext(page, content, false);
+  await whatsappModule.prepare(off.ctx);
+  assert.deepEqual(off.checks.filter((c) => c.state !== 'pass'), [], JSON.stringify(off.checks));
+  assert.ok((await page.locator('#title').innerText()).startsWith('ChoufTV Chaîne'), 'the exact channel, not "ChoufTV Live"');
+  assert.deepEqual(await sent(), []);
+  await assert.rejects(whatsappModule.publish(off.ctx), /auto-publish is off/);
+  assert.deepEqual(await sent(), []);
+
+  const on = testContext(page, content, true);
+  await whatsappModule.publish(on.ctx);
+  assert.deepEqual(await sent(), ['خبر عاجل 🚨']);
+  assert.ok(on.checks.some((c) => c.label === 'Sent to the channel' && c.state === 'pass'));
+  await context.close();
+});
+
+test('WhatsApp: a media tray left open is never discarded; a follow-only channel is refused', async () => {
+  const { context, page } = await whatsappPage();
+  await page.goto('https://web.whatsapp.com/');
+  await page.evaluate(() => {
+    const send = document.querySelector('#send') as HTMLElement;
+    send.hidden = false;
+    send.setAttribute('aria-label', 'Envoyer 1 élément sélectionné');
+    (document.querySelector('#main') as HTMLElement).hidden = false;
+  });
+  const content = { targets: ['whatsapp' as const], text: 'Next', media: [], whatsapp: { channel: 'MAP' } };
+  const { ctx, waits } = testContext(page, content);
+  await assert.rejects(whatsappModule.prepare(ctx), /can't post in "MAP"/);
+  assert.ok(waits.some((w) => /still waiting to be sent/.test(w)));
   await context.close();
 });
 

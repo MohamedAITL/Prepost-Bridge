@@ -144,6 +144,10 @@ export const api = {
   /** Posts captured from WhatsApp; each one is handed to a single dashboard. */
   claimIncoming: () => request<{ items: IncomingItem[] }>('POST', '/api/incoming/claim'),
 
+  getWhatsAppChannels: () => request<{ channels: string[] }>('GET', '/api/whatsapp/channels'),
+  saveWhatsAppChannels: (channels: string[]) => request<{ channels: string[] }>('PUT', '/api/whatsapp/channels', { channels }),
+  refreshWhatsAppChannels: () => request<{ channels: string[] }>('POST', '/api/whatsapp/channels/refresh'),
+
   launchBrowser: () => request<BrowserState>('POST', '/api/browser/launch'),
   setBrowserMode: (mode: BrowserMode) => request<BrowserState>('POST', '/api/browser/mode', { mode }),
   openDashboardInBrowser: () => request<BrowserState>('POST', '/api/browser/open-dashboard', { origin: window.location.origin }),

@@ -12,6 +12,7 @@ interface Prefs {
   youtube: Pick<Draft['youtube'], 'postType' | 'channel' | 'audience' | 'visibility' | 'advanceToVisibilityStep'>;
   meta: Pick<Draft['meta'], 'confirmDestinations' | 'pages' | 'videoAs'>;
   wordpress?: Pick<Draft['wordpress'], 'postType' | 'categories' | 'options'>;
+  whatsapp?: Draft['whatsapp'];
 }
 
 interface StoredPost {
@@ -56,6 +57,7 @@ function freshDraft(seedEnabled = false): Draft {
     Object.assign(base.youtube, prefs.youtube ?? {});
     Object.assign(base.meta, prefs.meta ?? {});
     Object.assign(base.wordpress, prefs.wordpress ?? {});
+    Object.assign(base.whatsapp, prefs.whatsapp ?? {});
   }
   return base;
 }
@@ -76,6 +78,7 @@ function mergeDraft(saved: Partial<Draft>): Draft {
     youtube: { ...base.youtube, ...saved.youtube },
     meta: { ...base.meta, ...saved.meta },
     wordpress: { ...base.wordpress, ...saved.wordpress },
+    whatsapp: { ...base.whatsapp, ...saved.whatsapp },
   };
 }
 
@@ -107,6 +110,7 @@ export function useBatch() {
       youtube: { postType: d.youtube.postType, channel: d.youtube.channel, audience: d.youtube.audience, visibility: d.youtube.visibility, advanceToVisibilityStep: d.youtube.advanceToVisibilityStep },
       meta: { confirmDestinations: d.meta.confirmDestinations, pages: d.meta.pages, videoAs: d.meta.videoAs },
       wordpress: { postType: d.wordpress.postType, categories: d.wordpress.categories, options: d.wordpress.options },
+      whatsapp: d.whatsapp,
     };
     safeSet(() => localStorage, PREFS_KEY, prefs);
   }, [posts, active]);
@@ -164,6 +168,7 @@ export function useBatch() {
           draft.youtube = { ...template.youtube, title: '' };
           draft.meta = structuredClone(template.meta);
           draft.wordpress = { ...structuredClone(template.wordpress), title: '', tags: '' };
+          draft.whatsapp = structuredClone(template.whatsapp);
           added.push({ id: newId(), title: nextTitle([...prev, ...added]), draft });
         }
         return [...prev, ...added];

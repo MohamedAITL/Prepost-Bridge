@@ -14,6 +14,7 @@ import { MetaPagePicker } from '../components/MetaPagePicker';
 import { PlatformTabs } from '../components/PlatformTabs';
 import { PlatformSelector } from '../components/PlatformSelector';
 import { SettingsMenu } from '../components/SettingsMenu';
+import { WhatsAppChannelPicker } from '../components/WhatsAppChannelPicker';
 import { YouTubeChannelPicker } from '../components/YouTubeChannelPicker';
 import { PostStrip } from '../components/PostStrip';
 import { useBatch } from '../hooks/useBatch';
@@ -53,6 +54,7 @@ export function Dashboard() {
   const [engineChoices, setEngineChoices] = useState<EngineInfo[] | null>(null);
   const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
   const [ytChannels, setYtChannels] = useState<YouTubeChannel[]>([]);
+  const [waChannels, setWaChannels] = useState<string[]>([]);
 
   /** Keep the ticked Pages in sync with the saved list (renamed/removed Pages, unlinked Instagram). */
   const applyMetaPages = useCallback(
@@ -74,6 +76,14 @@ export function Dashboard() {
   );
 
   /** Keep the chosen channel valid when the list changes. */
+  const applyWaChannels = useCallback(
+    (channels: string[]) => {
+      setWaChannels(channels);
+      update((d) => ({ ...d, whatsapp: { channels: d.whatsapp.channels.filter((c) => channels.includes(c)) } }));
+    },
+    [update],
+  );
+
   const applyYtChannels = useCallback(
     (channels: YouTubeChannel[]) => {
       setYtChannels(channels);
@@ -107,12 +117,13 @@ export function Dashboard() {
         );
         api.getMetaPages().then(({ pages }) => applyMetaPages(pages));
         api.getYouTubeChannels().then(({ channels }) => applyYtChannels(channels));
+        api.getWhatsAppChannels().then(({ channels }) => applyWaChannels(channels)).catch(() => undefined);
       })
       .catch(() => alive && setEngine('down'));
     return () => {
       alive = false;
     };
-  }, [updateAll, applyMetaPages, applyYtChannels]);
+  }, [updateAll, applyMetaPages, applyYtChannels, applyWaChannels]);
 
   useEffect(() => {
     if (engine !== 'up') return;
@@ -385,6 +396,15 @@ export function Dashboard() {
                 onSelect={(channel) => update((d) => ({ ...d, youtube: { ...d.youtube, channel } }))}
                 onSaveChannels={(channels) => run(async () => applyYtChannels((await api.saveYouTubeChannels(channels)).channels))}
                 onLoadFromYouTube={async () => applyYtChannels((await api.refreshYouTubeChannels()).channels)}
+              />
+            }
+            whatsappChannelPicker={
+              <WhatsAppChannelPicker
+                channels={waChannels}
+                selected={draft.whatsapp.channels}
+                onSelect={(channels) => update((d) => ({ ...d, whatsapp: { channels } }))}
+                onSaveChannels={(channels) => run(async () => applyWaChannels((await api.saveWhatsAppChannels(channels)).channels))}
+                onLoadFromWhatsApp={async () => applyWaChannels((await api.refreshWhatsAppChannels()).channels)}
               />
             }
           />

@@ -251,6 +251,12 @@ class CdpRelay extends EventEmitter {
     await this.callExtension({ type: 'activateTab', tabId, focusWindow: opts.focusWindow ?? true }, 10_000);
   }
 
+  /** Your open WhatsApp Web tab, if any. */
+  async findWhatsAppTab(): Promise<number | null> {
+    const r = await this.callExtension<{ tabId: number | null }>({ type: 'findWhatsAppTab' }, 5000);
+    return r.tabId ?? null;
+  }
+
   /** The tab the user is looking at (in the last focused Chrome window). */
   async activeTab(): Promise<number | null> {
     const r = await this.callExtension<{ tabId: number | null }>({ type: 'getActiveTab' }, 5000);

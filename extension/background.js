@@ -1,8 +1,9 @@
 // Prepost Bridge
 //
 // Connects ONLY to the local app at ws://127.0.0.1:<port>/bridge/extension with your pairing code.
-// It controls (via chrome.debugger) only the tabs the app asks it to open; it never attaches to
-// your other tabs. Closing a tab or pressing "Cancel" on Chrome's debugging bar stops control.
+// It controls (via chrome.debugger) only the tabs the app asks it to open, plus your WhatsApp Web
+// tab while posting to a WhatsApp Channel (WhatsApp Web works in one tab per browser); it never
+// attaches to your other tabs. Closing a tab or pressing "Cancel" on Chrome's debugging bar stops control.
 
 let ws = null;
 let connecting = false;
@@ -128,6 +129,10 @@ async function handle(msg) {
         const target = msg.sessionId ? { tabId: msg.tabId, sessionId: msg.sessionId } : { tabId: msg.tabId };
         const result = await chrome.debugger.sendCommand(target, msg.method, msg.params || {});
         return reply(result);
+      }
+      case 'findWhatsAppTab': {
+        const [tab] = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' });
+        return reply({ tabId: tab ? tab.id : null });
       }
       case 'activateTab': {
         const tab = await chrome.tabs.update(msg.tabId, { active: true });
@@ -331,6 +336,7 @@ async function waRotate() {
     const st = await chrome.storage.local.get({ enabled: true, multiEnabled: false, chats: [], rotationIndex: 0 });
     if (!st.enabled || !st.multiEnabled || !st.chats.length) return;
     const tab = await waScannerTab();
+    if (controlled.has(tab.id)) return; // a WhatsApp Channel post is in progress in this tab
     if (tab.status !== 'complete') return waScannerLog('تبويب WhatsApp ديال المراقبة كيتحمّل');
     const index = st.rotationIndex % st.chats.length;
     const chat = st.chats[index];

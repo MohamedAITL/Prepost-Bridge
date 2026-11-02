@@ -107,6 +107,17 @@ export const PLATFORM_RULES: Record<DestinationId, PlatformRules> = {
     allowMixedImageAndVideo: false,
     notes: ['A Chouf article: title, body, tags and sections, with one featured image. A video article uses the YouTube link from Link.'],
   },
+  // WhatsApp publishes no firm limits for Channels: these only warn, and its own refusal shows in the tab.
+  whatsapp: {
+    textLimit: 4096,
+    textCounting: 'graphemes',
+    textLimitIsHard: false,
+    requiresMedia: false,
+    image: { mimes: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 16 * MB, maxCount: 1, sizeIsSoft: true },
+    video: { mimes: MP4_MOV, maxBytes: 100 * MB, maxCount: 1, sizeIsSoft: true },
+    allowMixedImageAndVideo: false,
+    notes: ['Text, one photo or one video per channel update.'],
+  },
 };
 
 export const YOUTUBE_TITLE_LIMIT = 100;

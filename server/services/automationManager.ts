@@ -12,6 +12,7 @@ import { tiktokStudioModule } from '../platforms/tiktokStudio';
 import type { JobContent, PlatformModule, PrepareContext, WaitForUserOptions } from '../platforms/types';
 import { xModule } from '../platforms/x';
 import { readYouTubeChannels, youtubeStudioModule } from '../platforms/youtubeStudio';
+import { readWhatsAppChannels, whatsappModule } from '../platforms/whatsapp';
 import { wordpressModule } from '../platforms/wordpress';
 import { logger } from '../utils/logger';
 import { cdpRelay } from '../bridge/cdpRelay';
@@ -24,6 +25,7 @@ export const MODULES: Record<ModuleId, PlatformModule> = {
   youtube: youtubeStudioModule,
   tiktok: tiktokStudioModule,
   wordpress: wordpressModule,
+  whatsapp: whatsappModule,
 };
 
 function planLabel(plan: JobPlan, draft?: Draft): string {
@@ -36,13 +38,14 @@ function planBody(plan: JobPlan, draft?: Draft): string {
     const kind = draft.youtube.postType === 'post' ? 'post' : 'video';
     return draft.youtube.channel ? `YouTube: ${draft.youtube.channel} (${kind})` : `YouTube (${kind})`;
   }
+  if (plan.moduleId === 'whatsapp') return `WhatsApp: ${plan.whatsappChannel}`;
   if (plan.moduleId !== 'meta') return MODULE_LABELS[plan.moduleId];
   const where = plan.targets.map((t) => (t === 'facebook' ? 'Facebook' : 'Instagram')).join(' + ');
   return `${plan.metaPage || 'Meta'} (${where})`;
 }
 
 function samePlan(a: JobPlan, b: JobPlan) {
-  return a.moduleId === b.moduleId && a.targets.join() === b.targets.join() && (a.metaPage ?? '') === (b.metaPage ?? '') && (a.postId ?? '') === (b.postId ?? '');
+  return a.moduleId === b.moduleId && a.targets.join() === b.targets.join() && (a.metaPage ?? '') === (b.metaPage ?? '') && (a.whatsappChannel ?? '') === (b.whatsappChannel ?? '') && (a.postId ?? '') === (b.postId ?? '');
 }
 
 class CancelledError extends Error {
@@ -96,15 +99,19 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  * Runs one independent job per destination group. Each job gets its own tab in the shared
  * persistent browser; a failure in one never affects the others.
  */
+/** WhatsApp Web works in one tab per browser, so every WhatsApp job shares it. */
+const WHATSAPP_TAB = 'whatsapp';
+
 /** Which tab a job runs in: one per platform (one per Meta Page), reused across runs. */
 function tabKey(plan: JobPlan): string {
   const post = plan.postId ?? 'single';
+  if (plan.moduleId === 'whatsapp') return WHATSAPP_TAB;
   return plan.moduleId === 'meta' ? `post:${post}:meta:${plan.metaPage ?? ''}` : `post:${post}:${plan.moduleId}`;
 }
 
 /** How many jobs of each module may run at the same time. YouTube's active channel and TikTok's
  *  single upload draft are browser-wide, so those run one at a time. */
-const MODULE_LIMITS: Record<ModuleId, number> = { youtube: 1, tiktok: 1, meta: 3, x: 2, wordpress: 2 };
+const MODULE_LIMITS: Record<ModuleId, number> = { youtube: 1, tiktok: 1, meta: 3, x: 2, wordpress: 2, whatsapp: 1 };
 const MAX_CONCURRENT = 6;
 
 class AutomationManager extends EventEmitter {
@@ -122,6 +129,11 @@ class AutomationManager extends EventEmitter {
         logger.info('browser', `Could not reuse the ${key} tab (${(e as Error).message}); opening a new one`);
         return null;
       });
+    }
+    if (!page && key === WHATSAPP_TAB && browserManager.currentMode === 'extension') {
+      // A second WhatsApp tab would take over from yours (and stop the WhatsApp capture): use yours.
+      const tabId = await cdpRelay.findWhatsAppTab().catch(() => null);
+      if (tabId != null) page = await browserManager.adoptBridgeTab(tabId).catch(() => null);
     }
     page ??= await browserManager.newPage({ background: true });
     const tagged = page as Page & { __dialogs?: boolean };
@@ -173,6 +185,7 @@ class AutomationManager extends EventEmitter {
       wordpress: article
         ? { postType: draft.wordpress.postType, tags: article.tags, categories: draft.wordpress.categories, options: draft.wordpress.options, videoUrl: article.videoUrl }
         : undefined,
+      whatsapp: plan.moduleId === 'whatsapp' ? { channel: plan.whatsappChannel ?? '' } : undefined,
     };
   }
 
@@ -624,6 +637,23 @@ class AutomationManager extends EventEmitter {
         throw e;
       });
       logger.info('youtube', `Found ${channels.length} channel(s)`);
+      return channels;
+    } finally {
+      await this.releaseTab(page);
+    }
+  }
+
+  /** Read the Channels you run from WhatsApp Web, in your WhatsApp tab. */
+  async refreshWhatsAppChannels(): Promise<string[]> {
+    if (this.moduleBusy('whatsapp')) throw new Error('A WhatsApp post is being prepared; try again when it has finished.');
+    const page = await this.acquireTab(WHATSAPP_TAB);
+    try {
+      const channels = await readWhatsAppChannels(page).catch(async (e) => {
+        const file = await savePageOutline(page, 'whatsapp-channels', `Error: ${(e as Error).message}`);
+        if (file) logger.warn('whatsapp', `Saved a page outline for troubleshooting: ${file}`);
+        throw e;
+      });
+      logger.info('whatsapp', `Found ${channels.length} channel(s)`);
       return channels;
     } finally {
       await this.releaseTab(page);

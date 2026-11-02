@@ -137,6 +137,23 @@ test('Meta: Facebook and Instagram are chosen per Page', () => {
   assert.ok(errors(d, 'facebook').some((m) => /^Instagram \(linked to Both, Instagram only\)/.test(m)));
 });
 
+test('WhatsApp: one job per ticked channel; ticking one is required', () => {
+  const d = draftWith((x) => {
+    x.sharedText = 'News';
+    x.platforms.whatsapp.enabled = true;
+  });
+  assert.ok(errors(d, 'whatsapp').some((m) => /at least one channel/.test(m)));
+  d.whatsapp.channels = ['ChoufTV', 'ChoufSport'];
+  assert.deepEqual(errors(d, 'whatsapp'), []);
+  assert.deepEqual(planJobs(d).map((p) => [p.moduleId, p.whatsappChannel]), [
+    ['whatsapp', 'ChoufTV'],
+    ['whatsapp', 'ChoufSport'],
+  ]);
+  // Sizes only warn: WhatsApp has no firm published limits for Channels.
+  d.media = [vid('v', { size: 500 * 1024 * 1024 })];
+  assert.deepEqual(errors(d, 'whatsapp'), []);
+});
+
 test('oversized and wrong-type files are reported', () => {
   const d = draftWith((x) => {
     x.media = [img('big', { size: 50 * 1024 * 1024 }), img('heic', { mime: 'image/gif' })];

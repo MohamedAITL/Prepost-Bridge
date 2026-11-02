@@ -12,7 +12,7 @@ import { browserManager } from './browser/browserManager';
 import { cdpRelay } from './bridge/cdpRelay';
 import { config } from './config';
 import { automationManager, BatchFailure, ValidationFailure } from './services/automationManager';
-import { parseBatch, parseDraft, parseMetaPages, parseYouTubeChannels } from './services/contentValidator';
+import { parseBatch, parseDraft, parseMetaPages, parseWhatsAppChannels, parseYouTubeChannels } from './services/contentValidator';
 import { readSettings, writeSettings } from './utils/settings';
 import { incoming } from './services/incoming';
 import { MediaError, mediaStore } from './services/mediaStore';
@@ -258,6 +258,22 @@ cdpRelay.on('whatsappDraft', (draft: unknown, reply: (r: { ok: boolean; duplicat
       reply({ ok: false, error: (e as Error).message });
     });
 });
+
+// ---------- WhatsApp Channels (names only; stored with app settings) ----------
+app.get('/api/whatsapp/channels', (_req, res) => res.json({ channels: (readSettings().whatsappChannels as unknown[]) ?? [] }));
+app.put('/api/whatsapp/channels', (req, res) => {
+  const channels = parseWhatsAppChannels(req.body?.channels);
+  writeSettings({ whatsappChannels: channels });
+  res.json({ channels });
+});
+app.post(
+  '/api/whatsapp/channels/refresh',
+  asyncRoute(async (_req, res) => {
+    const channels = parseWhatsAppChannels(await automationManager.refreshWhatsAppChannels());
+    writeSettings({ whatsappChannels: channels });
+    res.json({ channels });
+  }),
+);
 
 app.get('/api/logs', (_req, res) => res.json(logger.recent(300)));
 

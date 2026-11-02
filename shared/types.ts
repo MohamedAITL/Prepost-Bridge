@@ -1,13 +1,13 @@
 // Types shared by the React frontend and the Node backend.
 
-export type DestinationId = 'facebook' | 'instagram' | 'x' | 'youtube' | 'tiktok' | 'wordpress';
+export type DestinationId = 'facebook' | 'instagram' | 'x' | 'youtube' | 'tiktok' | 'wordpress' | 'whatsapp';
 
 /**
  * Destinations offered in the UI. 'facebook' is the Meta destination: each selected Page is posted
  * through Meta Business Suite, and the Page's linked Instagram account is included by Meta itself.
  * 'instagram' stays as an id only so Instagram's rules can be applied to Pages that have one.
  */
-export const DESTINATIONS: DestinationId[] = ['facebook', 'x', 'youtube', 'tiktok', 'wordpress'];
+export const DESTINATIONS: DestinationId[] = ['facebook', 'x', 'youtube', 'tiktok', 'wordpress', 'whatsapp'];
 
 export const DESTINATION_LABELS: Record<DestinationId, string> = {
   facebook: 'Meta',
@@ -16,10 +16,11 @@ export const DESTINATION_LABELS: Record<DestinationId, string> = {
   youtube: 'YouTube Studio',
   tiktok: 'TikTok Studio',
   wordpress: 'WordPress (Chouf)',
+  whatsapp: 'WhatsApp Channels',
 };
 
 /** Automation modules. Facebook and Instagram both go through Meta Business Suite. */
-export type ModuleId = 'meta' | 'x' | 'youtube' | 'tiktok' | 'wordpress';
+export type ModuleId = 'meta' | 'x' | 'youtube' | 'tiktok' | 'wordpress' | 'whatsapp';
 
 export const MODULE_LABELS: Record<ModuleId, string> = {
   meta: 'Meta Business Suite',
@@ -27,6 +28,7 @@ export const MODULE_LABELS: Record<ModuleId, string> = {
   youtube: 'YouTube Studio',
   tiktok: 'TikTok Studio',
   wordpress: 'WordPress (Chouf)',
+  whatsapp: 'WhatsApp Channels',
 };
 
 export const DESTINATION_MODULE: Record<DestinationId, ModuleId> = {
@@ -36,6 +38,7 @@ export const DESTINATION_MODULE: Record<DestinationId, ModuleId> = {
   youtube: 'youtube',
   tiktok: 'tiktok',
   wordpress: 'wordpress',
+  whatsapp: 'whatsapp',
 };
 
 export type MediaKind = 'image' | 'video';
@@ -131,6 +134,11 @@ export interface WordPressOptions {
   options: string[];
 }
 
+export interface WhatsAppOptions {
+  /** Channels this post goes to (one job each), by name as shown in WhatsApp. */
+  channels: string[];
+}
+
 export interface Draft {
   sharedText: string;
   /**
@@ -144,6 +152,7 @@ export interface Draft {
   youtube: YouTubeOptions;
   meta: MetaOptions;
   wordpress: WordPressOptions;
+  whatsapp: WhatsAppOptions;
 }
 
 /** One post in a batch: its own text, media, cover and platform choices. */
@@ -170,10 +179,12 @@ export function emptyDraft(): Draft {
       youtube: emptyPlatformConfig(),
       tiktok: emptyPlatformConfig(),
       wordpress: emptyPlatformConfig(),
+      whatsapp: emptyPlatformConfig(),
     },
     youtube: { postType: 'video', channel: '', title: '', audience: 'unset', visibility: 'unset', advanceToVisibilityStep: true },
     meta: { pages: [], confirmDestinations: false, videoAs: 'reel' },
     wordpress: wordpressDefaults('press'),
+    whatsapp: { channels: [] },
   };
 }
 

@@ -21,6 +21,7 @@ export interface JobContent {
   meta?: { page: string; confirmDestinations: boolean; videoAs: 'reel' | 'post' };
   /** WordPress: the article's settings (its title and body are `title` and `text`). */
   wordpress?: { postType: 'press' | 'program'; tags: string[]; categories: string[]; options: string[]; videoUrl: string };
+  whatsapp?: { channel: string };
 }
 
 export interface WaitForUserOptions {
