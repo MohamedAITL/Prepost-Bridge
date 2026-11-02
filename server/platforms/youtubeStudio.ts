@@ -280,10 +280,18 @@ async function publishVideo(ctx: PrepareContext) {
   if (!(await isChecked(page, sel))) await safeClick(page.locator(sel), `Visibility: ${vis}`, { forbiddenSelectors: YT.forbidden });
   if (!(await isChecked(page, sel))) throw new Error(`Could not select "${vis}" visibility.`);
   await ctx.publishClick(page.locator(YT.doneButton), vis === 'public' ? 'Publish' : 'Save');
-  // Studio swaps the upload dialog for "Video published"/"Video saved" (or closes it).
+  // A public video asks to confirm with a second Publish, in a dialog above the upload dialog.
+  const confirm = page.getByRole('button', { name: YT.confirmPublish }).filter({ visible: true }).and(page.locator(`:not(${YT.doneButton}, ${YT.doneButton} *)`));
+  let confirmed = false;
+  // Studio then swaps the upload dialog for "Video published"/"Video saved" (or closes it).
   const done = await pollUntil(async () => {
     const e = await dialogError(page);
     if (e) throw new Error(`YouTube reported: ${e}`);
+    if (!confirmed && (await confirm.count())) {
+      confirmed = true;
+      await ctx.publishClick(confirm, 'Publish (confirm)');
+      return false;
+    }
     return !!(await findVisible(page, YT.publishedDialog, 0)) || !(await findVisible(page, [YT.doneButton], 0));
   }, 90_000, 1000);
   if (!done) throw new Error('YouTube did not confirm: the upload dialog is still open.');

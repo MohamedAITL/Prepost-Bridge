@@ -82,6 +82,8 @@ export const YT = {
 
   /** Final submission control; pressed only with auto-publish on (PrepareContext.publishClick). */
   doneButton: 'ytcp-uploads-dialog #done-button',
+  /** The second Publish, confirming a public video. */
+  confirmPublish: /^(publish|publish anyway|publier|publier quand même|نشر)$/i,
   /** Shown after Publish/Save: "Video published" share dialog, or "still processing". */
   publishedDialog: ['ytcp-video-share-dialog', 'ytcp-uploads-still-processing-dialog'],
   forbidden: [
