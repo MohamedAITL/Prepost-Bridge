@@ -110,7 +110,14 @@ export async function readYouTubeChannels(page: Page): Promise<YouTubeChannel[]>
 /** Make YouTube act as this channel (switching is browser-wide), then confirm it. */
 async function ensureChannel(ctx: PrepareContext, name: string) {
   const { page } = ctx;
-  const current = await activeChannelName(page);
+  // A hidden tab may not render the channel's heading: show it before giving up on reading it.
+  const readChannel = async () => {
+    const found = await activeChannelName(page);
+    if (found) return found;
+    await ctx.showTab('YouTube switches channel');
+    return activeChannelName(page);
+  };
+  const current = await readChannel();
   if (current && foldName(current) === foldName(name)) {
     ctx.check(`Channel "${name}"`, 'pass');
     return;
@@ -126,7 +133,7 @@ async function ensureChannel(ctx: PrepareContext, name: string) {
     } else {
       ctx.log(`"${name}" did not appear on the channel switcher (attempt ${attempt})`, 'warn');
     }
-    now = await activeChannelName(page);
+    now = await readChannel();
     if (now && foldName(now) === foldName(name)) {
       ctx.check(`Channel "${name}"`, 'pass', current ? `Switched from "${current}"` : undefined);
       return;
@@ -210,6 +217,27 @@ async function preparePost(ctx: PrepareContext) {
   ctx.check('Post composer open', publish.visible ? 'pass' : 'unverified');
 }
 
+/**
+ * Click Next up to the Visibility step. Returns null once there, or the name of the step waiting
+ * for you. The step count varies: monetized channels add Rights management and Ad suitability, and
+ * Next stays disabled on Ad suitability. That rating is your own declaration to YouTube (final once
+ * submitted), so it's never answered here.
+ */
+async function advanceToVisibility(page: Page): Promise<string | null> {
+  const next = page.locator(YT.nextButton);
+  for (let i = 0; i < 8; i++) {
+    if (await findVisible(page, YT.visibilityStep, 0)) return null;
+    if (!(await pollUntil(async () => (await observeOnly(next)).enabled, 4000, 250))) break;
+    await safeClick(next, 'Next', { forbiddenSelectors: YT.forbidden });
+    const e = await dialogError(page);
+    if (e) throw new Error(`YouTube blocked the next step: ${e}`);
+    await new Promise((r) => setTimeout(r, 600)); // the step changes with an animation
+  }
+  if (await findVisible(page, YT.visibilityStep, 3000)) return null;
+  const step = await page.locator('ytcp-uploads-dialog').getByRole('tab', { selected: true }).first().innerText({ timeout: 3000 }).catch(() => '');
+  return step.trim() || 'the current step';
+}
+
 /** Auto-publish, channel post: press Post, then wait for the composer to empty. */
 async function publishPost(ctx: PrepareContext) {
   const { page } = ctx;
@@ -226,13 +254,8 @@ async function publishPost(ctx: PrepareContext) {
 /** Auto-publish, video: go to the Visibility step, choose the visibility (Public by default), press Publish/Save. */
 async function publishVideo(ctx: PrepareContext) {
   const { page, content } = ctx;
-  for (let i = 0; i < 3 && !(await findVisible(page, YT.visibilityStep, 0)); i++) {
-    await safeClick(page.locator(YT.nextButton), 'Next', { forbiddenSelectors: YT.forbidden });
-    const e = await dialogError(page);
-    if (e) throw new Error(`YouTube blocked the next step: ${e}`);
-    await findVisible(page, YT.visibilityStep, 5000);
-  }
-  if (!(await findVisible(page, YT.visibilityStep, 20_000))) throw new Error('Could not reach the Visibility step.');
+  const waiting = await advanceToVisibility(page);
+  if (waiting) throw new Error(`Stopped before publishing: YouTube needs your answer on "${waiting}".`);
   const want = content.youtube!.visibility;
   const vis = want === 'unset' ? 'public' : want;
   const sel = YT.visibility[vis];
@@ -263,19 +286,33 @@ export const youtubeStudioModule: PlatformModule = {
     const video = content.media.find((m) => m.item.kind === 'video');
     if (!video) throw new Error('No video file selected for YouTube.');
 
-    await ctx.step('Open YouTube Studio and check sign-in', () => openWithSession(ctx, youtubeStudioModule, YT.uploadUrl));
+    // With a channel to switch to, Studio would only be loaded twice: check sign-in on the lighter page.
+    await ctx.step('Open YouTube Studio and check sign-in', () => openWithSession(ctx, youtubeStudioModule, yt.channel ? YT.post.profileUrl : YT.uploadUrl));
     if (yt.channel) {
       await ctx.step('Switch to the selected channel', () => ensureChannel(ctx, yt.channel));
       await openUrl(page, YT.uploadUrl);
     }
 
     ctx.setStatus('preparing', 'Opening the upload dialog…', 15);
-    const dialog = await findVisible(page, YT.uploadsDialog, 30_000);
+    let dialog = await findVisible(page, YT.uploadsDialog, 30_000);
+    const studioChannel = /studio\.youtube\.com\/channel\/([^/?#]+)/.exec(page.url())?.[1];
+    if (!dialog && studioChannel) {
+      // youtube.com/upload can land on the Studio dashboard with the dialog closed.
+      await openUrl(page, `https://studio.youtube.com/channel/${studioChannel}/videos/upload?d=ud`);
+      dialog = await findVisible(page, YT.uploadsDialog, 20_000);
+    }
     if (!dialog) {
       // e.g. "Create a channel" prompt, or Studio opened without the dialog.
       await ctx.waitForUser('YouTube Studio did not show the upload dialog. If it asks you to create a channel or accept terms, do that, then open Create → Upload videos and press Continue.', {
         until: async () => !!(await findVisible(page, YT.uploadsDialog, 0)),
       });
+    }
+
+    if (yt.channel) {
+      // Studio shows the channel it's acting as beside the dialog: guards against uploading elsewhere.
+      const shown = page.getByRole('img', { name: yt.channel, exact: true, includeHidden: true });
+      const onChannel = await pollUntil(async () => (await shown.count()) > 0, 15_000);
+      ctx.check(`Studio is on "${yt.channel}"`, onChannel ? 'pass' : 'unverified', onChannel ? undefined : 'Check the channel in Studio before saving.');
     }
 
     ctx.setStatus('uploading', `Uploading ${video.item.name}…`, 25);
@@ -356,15 +393,9 @@ export const youtubeStudioModule: PlatformModule = {
 
     if (yt.advanceToVisibilityStep && yt.audience !== 'unset') {
       ctx.setStatus('preparing', 'Moving to the Visibility step (Next only)…', 70);
-      for (let i = 0; i < 3; i++) {
-        if (await findVisible(page, YT.visibilityStep, 0)) break;
-        await ctx.step(`Click Next (${i + 1}/3)`, () => safeClick(page.locator(YT.nextButton), 'Next', { forbiddenSelectors: YT.forbidden }));
-        const e = await dialogError(page);
-        if (e) throw new Error(`YouTube blocked the next step: ${e}`);
-      }
-      const atVisibility = await findVisible(page, YT.visibilityStep, 20_000);
-      ctx.check('Reached Visibility step', atVisibility ? 'pass' : 'unverified');
-      if (atVisibility && yt.visibility !== 'unset') {
+      const waiting = await ctx.step('Move to the Visibility step', () => advanceToVisibility(page));
+      ctx.check('Reached Visibility step', waiting ? 'unverified' : 'pass', waiting ? `YouTube needs your answer on "${waiting}". Finish it in the tab, then go on to Visibility.` : undefined);
+      if (!waiting && yt.visibility !== 'unset') {
         const sel = YT.visibility[yt.visibility];
         await ctx.step('Choose visibility', () => safeClick(page.locator(sel), `Visibility: ${yt.visibility}`, { forbiddenSelectors: YT.forbidden }));
         ctx.check(`Visibility "${yt.visibility}" selected (not saved)`, (await isChecked(page, sel)) ? 'pass' : 'unverified');
@@ -377,8 +408,9 @@ export const youtubeStudioModule: PlatformModule = {
     ctx.check('Video file uploaded', transferred ? 'pass' : 'unverified', status || undefined);
 
     ctx.setStatus('verifying', 'Final check…', 95);
-    const done = await observeOnly(page.locator(YT.doneButton));
-    ctx.check('Upload dialog open', done.visible ? 'pass' : 'unverified');
+    // Save/Publish only shows on the Visibility step; Next on the steps before it.
+    const inDialog = (await observeOnly(page.locator(YT.doneButton))).visible || (await observeOnly(page.locator(YT.nextButton))).visible;
+    ctx.check('Upload dialog open', inDialog ? 'pass' : 'unverified');
   },
 
   publish: (ctx) => (ctx.content.youtube!.postType === 'post' ? publishPost(ctx) : publishVideo(ctx)),

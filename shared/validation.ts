@@ -118,9 +118,18 @@ export function finalText(draft: Draft, d: DestinationId): string {
   return text;
 }
 
+/** The Title field, or else the first line of the YouTube text, cut to YouTube's limit. */
+export function youtubeTitle(draft: Draft): string {
+  if (draft.youtube.title.trim()) return draft.youtube.title;
+  const line = baseText(draft, 'youtube').split(/\r?\n/).map((s) => s.trim()).find(Boolean) ?? '';
+  const chars = segmenter ? Array.from(segmenter.segment(line), (s) => s.segment) : Array.from(line);
+  return chars.slice(0, YOUTUBE_TITLE_LIMIT).join('').trim();
+}
+
 export function selectedMedia(draft: Draft, d: DestinationId): MediaItem[] {
   const cfg = draft.platforms[d];
-  let items = cfg.mediaIds === null ? draft.media : cfg.mediaIds.map((id) => draft.media.find((m) => m.id === id)).filter((m): m is MediaItem => !!m);
+  const youtubeOwn = d === 'youtube' ? draft.media.filter((m) => m.youtubeOnly) : [];
+  let items = youtubeOwn.length ? youtubeOwn : (cfg.mediaIds === null ? draft.media : cfg.mediaIds.map((id) => draft.media.find((m) => m.id === id)).filter((m): m is MediaItem => !!m)).filter((m) => !m.youtubeOnly);
   // The cover image is only ever used as a cover, never as post media.
   if (draft.coverId) items = items.filter((m) => m.id !== draft.coverId);
   return items;
@@ -204,9 +213,9 @@ function buildSingle(draft: Draft, d: DestinationId): DestinationContent {
   }
 
   if (d === 'youtube' && draft.youtube.postType === 'video') {
-    const title = draft.youtube.title;
+    const title = youtubeTitle(draft);
     result.title = title;
-    if (!title.trim()) issues.push({ level: 'error', message: 'YouTube needs a video title.' });
+    if (!title.trim()) issues.push({ level: 'error', message: 'YouTube needs a video title: write the text, or fill Title.' });
     if (graphemeLength(title) > YOUTUBE_TITLE_LIMIT) issues.push({ level: 'error', message: `YouTube titles are limited to ${YOUTUBE_TITLE_LIMIT} characters.` });
     if (/[<>]/.test(title) || /[<>]/.test(text)) issues.push({ level: 'error', message: 'YouTube does not allow "<" or ">" in titles or descriptions.' });
     if (draft.youtube.audience === 'unset') {
@@ -354,7 +363,8 @@ export function planJobs(draft: Draft): JobPlan[] {
   const plans: JobPlan[] = [];
   if (enabled.includes('facebook')) {
     for (const page of draft.meta.pages) {
-      plans.push({ moduleId: 'meta', targets: page.instagram ? ['facebook', 'instagram'] : ['facebook'], metaPage: page.name });
+      const targets: DestinationId[] = [...(page.facebook !== false ? (['facebook'] as const) : []), ...(page.instagram ? (['instagram'] as const) : [])];
+      if (targets.length) plans.push({ moduleId: 'meta', targets, metaPage: page.name });
     }
   }
   for (const d of ['x', 'youtube', 'tiktok', 'wordpress'] as const) if (enabled.includes(d)) plans.push({ moduleId: d, targets: [d] });

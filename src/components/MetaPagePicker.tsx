@@ -18,13 +18,17 @@ export function MetaPagePicker({ pages, selected, onSelect, onSavePages, onLoadF
   const [editing, setEditing] = useState(false);
   const [newName, setNewName] = useState('');
   const [newIg, setNewIg] = useState(false);
-  const isSelected = (p: MetaPage) => selected.some((s) => s.name === p.name);
+  const ticked = (p: MetaPage) => selected.find((s) => s.name === p.name);
+  const onFacebook = (p: MetaPage) => {
+    const s = ticked(p);
+    return !!s && s.facebook !== false;
+  };
+  const onInstagram = (p: MetaPage) => !!ticked(p)?.instagram;
 
-  const toggle = (p: MetaPage, on: boolean) => {
-    const names = new Set(selected.map((s) => s.name));
-    if (on) names.add(p.name);
-    else names.delete(p.name);
-    onSelect(pages.filter((x) => names.has(x.name)));
+  /** Facebook and Instagram are chosen separately; a Page with neither isn't selected. */
+  const toggle = (p: MetaPage, key: 'facebook' | 'instagram', on: boolean) => {
+    const next = { name: p.name, facebook: onFacebook(p), instagram: onInstagram(p), [key]: on };
+    onSelect(pages.flatMap((x) => (x.name === p.name ? (next.facebook || next.instagram ? [next] : []) : (ticked(x) ? [ticked(x)!] : []))));
   };
 
   const load = async () => {
@@ -65,16 +69,23 @@ export function MetaPagePicker({ pages, selected, onSelect, onSavePages, onLoadF
       <ul className="option-list">
         {pages.map((p) => (
           <li key={p.name}>
-            <label className="option">
-              <input type="checkbox" checked={isSelected(p)} onChange={(e) => toggle(p, e.target.checked)} />
+            <div className="option">
               <span className="option-name" dir="auto">
                 {p.name}
               </span>
               <span className="option-marks">
-                <MiniLogo which="facebook" />
-                {p.instagram && <MiniLogo which="instagram" />}
+                <label className="page-tick" title="Post on Facebook">
+                  <input type="checkbox" checked={onFacebook(p)} onChange={(e) => toggle(p, 'facebook', e.target.checked)} aria-label={`${p.name} on Facebook`} />
+                  <MiniLogo which="facebook" />
+                </label>
+                {p.instagram && (
+                  <label className="page-tick" title="Post on Instagram">
+                    <input type="checkbox" checked={onInstagram(p)} onChange={(e) => toggle(p, 'instagram', e.target.checked)} aria-label={`${p.name} on Instagram`} />
+                    <MiniLogo which="instagram" />
+                  </label>
+                )}
               </span>
-            </label>
+            </div>
             {editing && (
               <span className="row">
                 <label className="option small">

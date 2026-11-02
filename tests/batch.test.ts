@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { isJobRunning } from '../shared/jobs';
 import { emptyDraft, type BatchPost, type Draft, type MediaItem } from '../shared/types';
 import { planBatch } from '../shared/validation';
 
@@ -11,6 +12,14 @@ function post(id: string, title: string, patch: (d: Draft) => void): BatchPost {
   patch(draft);
   return { id, title, draft };
 }
+
+test('a job paused for you still holds its platform, so the next one on it waits', () => {
+  assert.equal(isJobRunning({ status: 'uploading', awaitingUser: null }), true);
+  // Paused jobs sit in needs_attention, which isn't an active status: the overlap this prevents.
+  assert.equal(isJobRunning({ status: 'needs_attention', awaitingUser: 'Press Continue' }), true);
+  assert.equal(isJobRunning({ status: 'needs_attention', awaitingUser: null }), false);
+  assert.equal(isJobRunning({ status: 'ready', awaitingUser: null }), false);
+});
 
 test('each post × platform gets its own tab key, stable when the same post re-prepares', () => {
   const posts = [

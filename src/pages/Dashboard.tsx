@@ -54,11 +54,21 @@ export function Dashboard() {
   const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
   const [ytChannels, setYtChannels] = useState<YouTubeChannel[]>([]);
 
-  /** Keep the ticked Pages in sync with the saved list (renamed/removed Pages, Instagram flags). */
+  /** Keep the ticked Pages in sync with the saved list (renamed/removed Pages, unlinked Instagram). */
   const applyMetaPages = useCallback(
     (pages: MetaPage[]) => {
       setMetaPages(pages);
-      update((d) => ({ ...d, meta: { ...d.meta, pages: pages.filter((p) => d.meta.pages.some((s) => s.name === p.name)) } }));
+      update((d) => ({
+        ...d,
+        meta: {
+          ...d.meta,
+          pages: pages.flatMap((p) => {
+            const ticked = d.meta.pages.find((s) => s.name === p.name);
+            const next = ticked && { ...ticked, instagram: ticked.instagram && p.instagram };
+            return next && (next.facebook !== false || next.instagram) ? [next] : [];
+          }),
+        },
+      }));
     },
     [update],
   );
@@ -139,7 +149,7 @@ export function Dashboard() {
   }, []);
 
   const onFiles = useCallback(
-    (files: File[], opts: { asCover?: boolean } = {}) => {
+    (files: File[], opts: { asCover?: boolean; youtubeOnly?: boolean } = {}) => {
       for (const file of files) {
         const key = `${file.name}-${file.size}-${Math.random()}`;
         setPending((p) => [...p, { key, name: file.name, progress: 0 }]);
@@ -147,7 +157,7 @@ export function Dashboard() {
           try {
             const hints = await probeMedia(file);
             const item = await api.uploadMedia(file, hints, (progress) => setPending((p) => p.map((x) => (x.key === key ? { ...x, progress } : x))));
-            update((d) => ({ ...d, media: [...d.media, item], coverId: opts.asCover && item.kind === 'image' ? item.id : d.coverId }));
+            update((d) => ({ ...d, media: [...d.media, opts.youtubeOnly ? { ...item, youtubeOnly: true } : item], coverId: opts.asCover && item.kind === 'image' ? item.id : d.coverId }));
             setPending((p) => p.filter((x) => x.key !== key));
           } catch (e) {
             setPending((p) => p.map((x) => (x.key === key ? { ...x, error: (e as Error).message } : x)));
@@ -390,7 +400,15 @@ export function Dashboard() {
               <p className="step-sub">What will be filled in, with any warnings.</p>
             </div>
           </header>
-          <PlatformTabs destinations={selected} draft={draft} validation={validation} onPlatformChange={updatePlatform} onDraftChange={update} />
+          <PlatformTabs
+            destinations={selected}
+            draft={draft}
+            validation={validation}
+            onPlatformChange={updatePlatform}
+            onDraftChange={update}
+            onYouTubeFiles={(files) => onFiles(files, { youtubeOnly: true })}
+            onRemoveMedia={removeMedia}
+          />
         </section>
       )}
 

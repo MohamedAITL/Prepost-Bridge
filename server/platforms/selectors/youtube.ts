@@ -11,6 +11,8 @@ export const YT = {
     loggedOutUrl: /accounts\.google\.com\/(v3\/)?signin|ServiceLogin/,
     challenge: ['#captchaimg', 'iframe[title*="recaptcha" i]'],
     challengeUrl: /accounts\.google\.com\/.*(challenge|speedbump|deniedsigninrejected)/,
+    // Studio redirects to sign-in when signed out; its elements can stay unrendered in a hidden tab.
+    loggedInUrl: /studio\.youtube\.com\/channel\//,
   },
 
   // The ytcp-uploads-dialog host element has zero height (seen 2026-10); look for what's drawn inside it.

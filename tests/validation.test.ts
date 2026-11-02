@@ -69,7 +69,9 @@ test('Instagram requires media; YouTube requires a video and a title', () => {
   });
   assert.ok(errors(d, 'instagram').some((m) => /at least one/.test(m)));
   assert.ok(errors(d, 'youtube').some((m) => /needs a video/.test(m)));
+  d.sharedText = '';
   assert.ok(errors(d, 'youtube').some((m) => /title/.test(m)));
+  d.sharedText = 'Text only';
   d.media = [vid('v'), img('t')];
   d.youtube.title = 'My video';
   d.coverId = 't';
@@ -111,6 +113,28 @@ test('Meta: one composer per ticked Page; linked Instagram adds its rules', () =
   assert.ok(errors(d, 'facebook').some((m) => /^Instagram \(linked to Chouf Sport Officiel\)/.test(m)));
   d.media = [img('a')];
   assert.deepEqual(errors(d, 'facebook'), []);
+});
+
+test('Meta: Facebook and Instagram are chosen per Page', () => {
+  const d = draftWith((x) => {
+    x.sharedText = 'Same';
+    x.media = [img('a')];
+    x.platforms.facebook.enabled = true;
+    x.meta.pages = [
+      { name: 'Both', instagram: true },
+      { name: 'Facebook only', instagram: false, facebook: true },
+      { name: 'Instagram only', instagram: true, facebook: false },
+      { name: 'Neither', instagram: false, facebook: false },
+    ];
+  });
+  assert.deepEqual(planJobs(d).map((p) => [p.metaPage, p.targets]), [
+    ['Both', ['facebook', 'instagram']],
+    ['Facebook only', ['facebook']],
+    ['Instagram only', ['instagram']],
+  ]);
+  // Instagram's own rule still applies to an Instagram-only Page.
+  d.media = [];
+  assert.ok(errors(d, 'facebook').some((m) => /^Instagram \(linked to Both, Instagram only\)/.test(m)));
 });
 
 test('oversized and wrong-type files are reported', () => {
@@ -165,6 +189,42 @@ test('a cover whose image is gone is ignored, not an error', () => {
   });
   assert.deepEqual(errors(d, 'tiktok'), []);
   assert.equal(buildDestinationContent(d, 'tiktok').thumbnail ?? null, null);
+});
+
+test('YouTube title: first line of the text, cut to the limit; a typed title wins', () => {
+  const d = draftWith((x) => {
+    x.sharedText = '\n  عنوان الخبر 🚨  \nالنص الكامل';
+    x.media = [vid('v')];
+    x.platforms.youtube.enabled = true;
+  });
+  assert.equal(buildDestinationContent(d, 'youtube').title, 'عنوان الخبر 🚨');
+  assert.deepEqual(errors(d, 'youtube'), []);
+  // Custom YouTube text is what the title follows.
+  d.platforms.youtube.useSharedText = false;
+  d.platforms.youtube.customText = 'Custom first line\nmore';
+  assert.equal(buildDestinationContent(d, 'youtube').title, 'Custom first line');
+  d.platforms.youtube.useSharedText = true;
+  d.sharedText = '👋🏽'.repeat(120);
+  assert.equal(graphemeLength(buildDestinationContent(d, 'youtube').title ?? ''), 100);
+  assert.deepEqual(errors(d, 'youtube'), []);
+  d.youtube.title = 'Typed title';
+  assert.equal(buildDestinationContent(d, 'youtube').title, 'Typed title');
+});
+
+test('YouTube-only media replaces the shared media on YouTube and reaches no other platform', () => {
+  const d = draftWith((x) => {
+    x.sharedText = 'News';
+    x.media = [vid('shared'), vid('wide', { youtubeOnly: true })];
+    x.platforms.x.enabled = true;
+    x.platforms.youtube.enabled = true;
+  });
+  assert.deepEqual(buildDestinationContent(d, 'youtube').media.map((m) => m.id), ['wide']);
+  assert.deepEqual(buildDestinationContent(d, 'x').media.map((m) => m.id), ['shared']);
+  // Even an explicit selection can't pull it onto another platform.
+  d.platforms.x.mediaIds = ['shared', 'wide'];
+  assert.deepEqual(buildDestinationContent(d, 'x').media.map((m) => m.id), ['shared']);
+  d.media = [vid('shared')];
+  assert.deepEqual(buildDestinationContent(d, 'youtube').media.map((m) => m.id), ['shared']);
 });
 
 test('planBatch: one job per post × platform, tagged with the post', () => {

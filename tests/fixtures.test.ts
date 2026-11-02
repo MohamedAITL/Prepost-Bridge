@@ -225,6 +225,16 @@ test('WordPress module fills a Chouf article (title, body, Facebook title, tags,
   await context.close();
 });
 
+test('YouTube Studio counts as signed in from its address, even with nothing rendered yet', async () => {
+  const context = await browser.newContext();
+  // A hidden tab may leave Studio's custom elements without a size, so they never look "visible".
+  await context.route('https://studio.youtube.com/**', (route) => route.fulfill({ contentType: 'text/html', body: `<!doctype html><ytcp-app style="display:block;width:0;height:0;overflow:hidden">${'<button>x</button>'.repeat(8)}</ytcp-app>` }));
+  const page = await context.newPage();
+  await page.goto('https://studio.youtube.com/channel/UC123/videos/upload?d=ud');
+  assert.equal(await youtubeStudioModule.detectSession(page), 'logged_in');
+  await context.close();
+});
+
 const YT_FIXTURE = `<!doctype html><meta charset="utf-8">
 <ytcp-app></ytcp-app>
 <ytcp-uploads-dialog>

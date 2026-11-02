@@ -205,10 +205,35 @@ async function postToDestinations(page: Page): Promise<{ facebook: boolean; inst
   const combo = postToCombobox(page);
   if (!(await combo.isVisible().catch(() => false))) return null;
   return {
-    facebook: (await combo.getByRole('img', { name: 'Facebook' }).count()) > 0,
-    instagram: (await combo.getByRole('img', { name: 'Instagram' }).count()) > 0,
+    facebook: (await combo.getByRole('img', { name: META.facebookIcon }).count()) > 0,
+    instagram: (await combo.getByRole('img', { name: META.instagramIcon }).count()) > 0,
     label: (await combo.innerText().catch(() => '')).replace(/\s+/g, ' ').trim(),
   };
+}
+
+/**
+ * Seen 2026-11: "Post to" opens a listbox with one option per destination, marked by its Facebook
+ * or Instagram icon, and aria-selected. Business Suite needs one left ticked, so tick before unticking.
+ */
+async function setPostTo(page: Page, facebook: boolean, instagram: boolean) {
+  const combo = postToCombobox(page);
+  const openClose = { forbiddenSelectors: META.forbidden, allowLabels: META.postTo };
+  await safeClick(combo, 'Post to', openClose);
+  const list = page.getByRole('listbox').filter({ has: page.getByRole('option') }).filter({ visible: true }).first();
+  await list.waitFor({ state: 'visible', timeout: 10_000 });
+  const wanted = [
+    { icon: META.facebookIcon, on: facebook, label: 'Facebook' },
+    { icon: META.instagramIcon, on: instagram, label: 'Instagram' },
+  ].sort((a, b) => Number(b.on) - Number(a.on));
+  for (const { icon, on, label } of wanted) {
+    const row = list.getByRole('option').filter({ has: page.getByRole('img', { name: icon }) }).first();
+    if (!(await row.isVisible().catch(() => false))) continue;
+    const selected = async () => (await row.getAttribute('aria-selected').catch(() => null)) === 'true';
+    if ((await selected()) === on) continue;
+    await safeClick(row, `Post to: ${label}`, { forbiddenSelectors: META.forbidden });
+    await pollUntil(async () => (await selected()) === on, 5000, 200);
+  }
+  if ((await combo.getAttribute('aria-expanded').catch(() => null)) === 'true') await safeClick(combo, 'Post to', openClose);
 }
 
 async function currentAssetId(page: Page): Promise<string | null> {
@@ -410,11 +435,19 @@ export const metaModule: PlatformModule = {
       if (ok && assetId) rememberMetaAsset(pageName, assetId);
     }
 
-    // "Post to" already combines the Page and its linked Instagram account; just record it.
-    const dest = await postToDestinations(page);
+    // "Post to" starts with the Page and its linked Instagram: change it if the post wants only one.
+    const wantFacebook = content.targets.includes('facebook');
+    const wantInstagram = content.targets.includes('instagram');
+    let dest = await postToDestinations(page);
+    if (dest && (dest.facebook !== wantFacebook || dest.instagram !== wantInstagram)) {
+      ctx.setStatus('preparing', 'Choosing Facebook / Instagram…', 30);
+      await ctx.step('Choose Facebook / Instagram in "Post to"', () => setPostTo(page, wantFacebook, wantInstagram));
+      dest = await postToDestinations(page);
+    }
     if (dest) {
-      const where = [dest.facebook && 'Facebook', dest.instagram && 'Instagram'].filter(Boolean).join(' + ');
-      ctx.check(`Posting to ${where || '?'}`, dest.facebook ? 'pass' : 'unverified', dest.label);
+      const names = (fb: boolean, ig: boolean) => [fb && 'Facebook', ig && 'Instagram'].filter(Boolean).join(' + ') || '?';
+      const right = dest.facebook === wantFacebook && dest.instagram === wantInstagram;
+      ctx.check(`Posting to ${names(dest.facebook, dest.instagram)}`, right ? 'pass' : 'fail', right ? dest.label : `Wanted ${names(wantFacebook, wantInstagram)}. Fix "Post to" in the tab.`);
     } else {
       ctx.check('Destination', 'unverified', 'Could not read "Post to"; check it before publishing.');
     }

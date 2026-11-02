@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
-import { FilmStripIcon } from '@phosphor-icons/react';
-import { buildDestinationContent, graphemeLength, wordpressArticle } from '../../shared/validation';
+import { useRef, type ReactNode } from 'react';
+import { FilmStripIcon, TrashIcon, UploadSimpleIcon } from '@phosphor-icons/react';
+import { buildDestinationContent, graphemeLength, wordpressArticle, youtubeTitle } from '../../shared/validation';
 import { YOUTUBE_TITLE_LIMIT } from '../../shared/rules';
 import { WORDPRESS_CHOICES, wordpressDefaults } from '../../shared/types';
 import { api } from '../api';
@@ -14,6 +14,8 @@ interface Props {
   draft: Draft;
   onChange: (patch: Partial<PlatformConfig>) => void;
   onDraftChange: (fn: (d: Draft) => Draft) => void;
+  onYouTubeFiles: (files: File[]) => void;
+  onRemoveMedia: (id: string) => void;
 }
 
 /** A compact "A | B" choice. */
@@ -29,7 +31,8 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
   );
 }
 
-export function PlatformConfigCard({ destination: d, draft, onChange, onDraftChange }: Props) {
+export function PlatformConfigCard({ destination: d, draft, onChange, onDraftChange, onYouTubeFiles, onRemoveMedia }: Props) {
+  const ytFileRef = useRef<HTMLInputElement>(null);
   const cfg = draft.platforms[d];
   const content = buildDestinationContent(draft, d);
   const selectedIds = cfg.mediaIds ?? draft.media.map((m) => m.id);
@@ -38,8 +41,8 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
   const name = BRAND_NAMES[d];
   const textLabel = ytVideo ? 'Description' : d === 'tiktok' ? 'Caption' : d === 'wordpress' ? 'Article' : 'Text';
   // YouTube set to video upload, but this post only has images: offer the image-post type.
-  const ytMedia = draft.media.filter((m) => selectedIds.includes(m.id) && m.id !== draft.coverId);
-  const onlyImages = ytMedia.length > 0 && ytMedia.every((m) => m.kind === 'image');
+  const onlyImages = content.media.length > 0 && content.media.every((m) => m.kind === 'image');
+  const ytOwn = draft.media.filter((m) => m.youtubeOnly);
   const setYt = (patch: Partial<Draft['youtube']>) => onDraftChange((x) => ({ ...x, youtube: { ...x.youtube, ...patch } }));
   const setMeta = (patch: Partial<Draft['meta']>) => onDraftChange((x) => ({ ...x, meta: { ...x.meta, ...patch } }));
   const setWp = (patch: Partial<Draft['wordpress']>) => onDraftChange((x) => ({ ...x, wordpress: { ...x.wordpress, ...patch } }));
@@ -49,7 +52,7 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
   const wpChoices = WORDPRESS_CHOICES[wp.postType];
   const toggleWp = (key: 'options' | 'categories', name: string, on: boolean) =>
     setWp({ [key]: wpChoices[key].filter((x) => (x === name ? on : wp[key].includes(x))) });
-  const media = draft.media.filter((m) => m.id !== draft.coverId);
+  const media = draft.media.filter((m) => m.id !== draft.coverId && !m.youtubeOnly);
 
   const toggleMedia = (id: string, on: boolean) => {
     const set = new Set(selectedIds);
@@ -144,9 +147,9 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
         {ytVideo && (
           <div className="field">
             <label className="field-label" htmlFor="yt-title">
-              Title <span className="muted">{graphemeLength(draft.youtube.title)}/{YOUTUBE_TITLE_LIMIT}</span>
+              Title <span className="muted">{graphemeLength(youtubeTitle(draft))}/{YOUTUBE_TITLE_LIMIT}</span>
             </label>
-            <input id="yt-title" className="input" dir="auto" value={draft.youtube.title} onChange={(e) => setYt({ title: e.target.value })} />
+            <input id="yt-title" className="input" dir="auto" placeholder={draft.youtube.title ? undefined : youtubeTitle(draft) ? `From the text: ${youtubeTitle(draft)}` : 'Empty = the first line of the text'} value={draft.youtube.title} onChange={(e) => setYt({ title: e.target.value })} />
           </div>
         )}
 
@@ -181,7 +184,44 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
           )}
         </div>
 
-        {media.length > 0 && (
+        {d === 'youtube' && (
+          <div className="field">
+            <span className="field-label">Media for YouTube only</span>
+            {ytOwn.length > 0 && (
+              <ul className="option-list">
+                {ytOwn.map((m) => (
+                  <li key={m.id}>
+                    <span className="option-name truncate" title={m.name}>
+                      {m.name}
+                    </span>
+                    <button type="button" className="btn icon ghost danger" aria-label={`Remove ${m.name}`} onClick={() => onRemoveMedia(m.id)}>
+                      <TrashIcon size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="row">
+              <button type="button" className="btn small" onClick={() => ytFileRef.current?.click()}>
+                <UploadSimpleIcon size={14} aria-hidden /> Upload for YouTube only
+              </button>
+            </div>
+            <input
+              ref={ytFileRef}
+              type="file"
+              multiple
+              hidden
+              accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/webm,video/x-matroska,video/x-msvideo"
+              onChange={(e) => {
+                onYouTubeFiles(Array.from(e.target.files ?? []));
+                e.target.value = '';
+              }}
+            />
+            <p className="muted small">{ytOwn.length ? 'YouTube uses this instead of the shared media. Other platforms never get it.' : 'Use a different file on YouTube in this same post. The upload progress shows under Photos and videos.'}</p>
+          </div>
+        )}
+
+        {media.length > 0 && !(d === 'youtube' && ytOwn.length > 0) && (
           <div className="field">
             <span className="field-label">Media</span>
             <div className="media-pick">

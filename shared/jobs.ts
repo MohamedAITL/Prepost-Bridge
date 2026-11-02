@@ -34,6 +34,11 @@ export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
 
 export const ACTIVE_STATUSES: JobStatus[] = ['waiting', 'opening', 'login_required', 'preparing', 'uploading', 'filling', 'verifying', 'publishing'];
 
+/** A job still holds its platform while it runs, and while it's paused waiting for you. */
+export function isJobRunning(job: { status: JobStatus; awaitingUser: string | null }): boolean {
+  return ACTIVE_STATUSES.includes(job.status) || !!job.awaitingUser;
+}
+
 export interface JobCheck {
   label: string;
   state: 'pass' | 'fail' | 'unverified';

@@ -30,6 +30,7 @@ const mediaItem = z.object({
   width: z.number().positive().optional(),
   height: z.number().positive().optional(),
   durationSec: z.number().positive().optional(),
+  youtubeOnly: z.boolean().optional(),
 });
 
 const draftSchema = z.object({
@@ -53,7 +54,7 @@ const draftSchema = z.object({
     visibility: z.enum(['unset', 'private', 'unlisted', 'public']),
     advanceToVisibilityStep: z.boolean(),
   }),
-  meta: z.object({ pages: z.array(z.object({ name: z.string().min(1).max(200), instagram: z.boolean() })).max(100), confirmDestinations: z.boolean(), videoAs: z.enum(['reel', 'post']) }),
+  meta: z.object({ pages: z.array(z.object({ name: z.string().min(1).max(200), instagram: z.boolean(), facebook: z.boolean().optional() })).max(100), confirmDestinations: z.boolean(), videoAs: z.enum(['reel', 'post']) }),
   // Which sections/options are allowed per type is checked in shared/validation.ts.
   wordpress: z.object({
     postType: z.enum(['press', 'program']),

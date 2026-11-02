@@ -11,10 +11,12 @@ interface Props {
   validation: Record<DestinationId, DestinationContent>;
   onPlatformChange: (d: DestinationId, patch: Partial<PlatformConfig>) => void;
   onDraftChange: (fn: (d: Draft) => Draft) => void;
+  onYouTubeFiles: (files: File[]) => void;
+  onRemoveMedia: (id: string) => void;
 }
 
 /** One tab per selected platform: its settings next to a preview of exactly what gets filled in. */
-export function PlatformTabs({ destinations, draft, validation, onPlatformChange, onDraftChange }: Props) {
+export function PlatformTabs({ destinations, draft, validation, onPlatformChange, onDraftChange, onYouTubeFiles, onRemoveMedia }: Props) {
   const [active, setActive] = useState<DestinationId>(destinations[0]);
   useEffect(() => {
     if (!destinations.includes(active)) setActive(destinations[0]);
@@ -46,7 +48,7 @@ export function PlatformTabs({ destinations, draft, validation, onPlatformChange
         })}
       </div>
       <div className="tab-panel" role="tabpanel" id={`panel-${current}`} aria-labelledby={`tab-${current}`}>
-        <PlatformConfigCard key={current} destination={current} draft={draft} onChange={(patch) => onPlatformChange(current, patch)} onDraftChange={onDraftChange} />
+        <PlatformConfigCard key={current} destination={current} draft={draft} onChange={(patch) => onPlatformChange(current, patch)} onDraftChange={onDraftChange} onYouTubeFiles={onYouTubeFiles} onRemoveMedia={onRemoveMedia} />
       </div>
     </div>
   );

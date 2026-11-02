@@ -52,6 +52,8 @@ export interface MediaItem {
   width?: number;
   height?: number;
   durationSec?: number;
+  /** Used on YouTube only, in place of the post's shared media. No other platform gets it. */
+  youtubeOnly?: boolean;
 }
 
 /** How the optional link is used: appended to the text/description, or not used at all. */
@@ -94,10 +96,15 @@ export interface YouTubeOptions {
   advanceToVisibilityStep: boolean;
 }
 
-/** A Facebook Page in Business Suite; `instagram` = it has a linked Instagram account. */
+/**
+ * A Facebook Page in Business Suite. In the saved Page list, `instagram` = it has a linked Instagram
+ * account. In a post's selection (MetaOptions.pages) it = post to that Instagram account, and
+ * `facebook` = post to the Page itself (missing = yes, for drafts saved before this choice existed).
+ */
 export interface MetaPage {
   name: string;
   instagram: boolean;
+  facebook?: boolean;
 }
 
 export interface MetaOptions {

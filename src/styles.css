@@ -874,6 +874,12 @@ progress {
   color: var(--muted);
   margin-bottom: 4px;
 }
+.page-tick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
 .option-list {
   list-style: none;
   padding: 0;

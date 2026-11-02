@@ -38,7 +38,7 @@ export function MediaUploader({ media, coverId, onSetCover, onUploadCover, pendi
   const coverInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const postMedia = media.filter((m) => m.id !== coverId);
+  const postMedia = media.filter((m) => m.id !== coverId && !m.youtubeOnly);
 
   return (
     <div className="field">

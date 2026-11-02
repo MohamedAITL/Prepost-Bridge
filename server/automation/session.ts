@@ -54,7 +54,14 @@ export async function openWithSession(ctx: PrepareContext, mod: PlatformModule, 
     ctx.throwIfCancelled();
     ctx.setStatus('opening', `Opening ${mod.label}…`, 5);
     await openUrl(page, targetUrl);
-    const state = await settle(page, mod, 30_000);
+    let state = await settle(page, mod, 30_000);
+    if (state === 'unknown') {
+      // A hidden, busy tab may not render at all: show it and look again before asking you.
+      await ctx.showTab(`${mod.label} finishes loading`);
+      state = await settle(page, mod, 30_000);
+      if (state === 'unknown') await ctx.snapshot(`${mod.id}-session`);
+      await ctx.hideTab();
+    }
     ctx.log(`Session state on ${mod.label}: ${state}`);
     if (state === 'logged_in') return;
 

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { Page } from 'playwright';
-import { ACTIVE_STATUSES, type JobCheck, type JobSnapshot, type JobStatus } from '../../shared/jobs';
+import { ACTIVE_STATUSES, isJobRunning, type JobCheck, type JobSnapshot, type JobStatus } from '../../shared/jobs';
 import { DESTINATION_LABELS, MODULE_LABELS, type BatchPost, type Draft, type MetaPage, type ModuleId, type YouTubeChannel } from '../../shared/types';
 import { batchProblems, buildDestinationContent, hasErrors, planBatch, planJobs, wordpressArticle, type JobPlan, type PostProblem } from '../../shared/validation';
 import { browserManager } from '../browser/browserManager';
@@ -37,7 +37,7 @@ function planBody(plan: JobPlan, draft?: Draft): string {
     return draft.youtube.channel ? `YouTube: ${draft.youtube.channel} (${kind})` : `YouTube (${kind})`;
   }
   if (plan.moduleId !== 'meta') return MODULE_LABELS[plan.moduleId];
-  const where = plan.targets.includes('instagram') ? 'Facebook + Instagram' : 'Facebook';
+  const where = plan.targets.map((t) => (t === 'facebook' ? 'Facebook' : 'Instagram')).join(' + ');
   return `${plan.metaPage || 'Meta'} (${where})`;
 }
 
@@ -150,10 +150,11 @@ class AutomationManager extends EventEmitter {
         const stored = mediaStore.get(m.id);
         if (!stored) throw new Error(`Media "${m.name}" is no longer available. Remove it and add it again.`);
         const { filePath: _p, ...item } = stored;
-        return { ...item, width: m.width ?? item.width, height: m.height ?? item.height, durationSec: m.durationSec ?? item.durationSec };
+        return { ...item, width: m.width ?? item.width, height: m.height ?? item.height, durationSec: m.durationSec ?? item.durationSec, youtubeOnly: m.youtubeOnly };
       }),
     };
-    const first = buildDestinationContent(serverDraft, plan.targets[0]);
+    // Meta: always the 'facebook' content, also for an Instagram-only job (it holds Meta's settings).
+    const first = buildDestinationContent(serverDraft, plan.moduleId === 'meta' ? 'facebook' : plan.targets[0]);
     // Meta: the 'facebook' content already includes the rules of linked Instagram accounts.
     for (const t of plan.moduleId === 'meta' ? (['facebook'] as const) : plan.targets) {
       const c = buildDestinationContent(serverDraft, t);
@@ -201,7 +202,7 @@ class AutomationManager extends EventEmitter {
     }
     if (problems.length) throw new BatchFailure(problems);
 
-    const busy = [...this.jobs.values()].find((j) => plans.some((p) => samePlan(j.plan, p)) && ACTIVE_STATUSES.includes(j.snap.status));
+    const busy = [...this.jobs.values()].find((j) => plans.some((p) => samePlan(j.plan, p)) && isJobRunning(j.snap));
     if (busy) throw new BatchFailure([{ postId: busy.snap.postId, title: busy.snap.postTitle, messages: [`"${busy.snap.label}" is still being prepared. Wait for it or cancel it first.`] }]);
 
     // Replace finished jobs for the same post × destination (their tabs stay open and are reused).
@@ -221,11 +222,11 @@ class AutomationManager extends EventEmitter {
   private queue: Job[] = [];
 
   private runningByModule(moduleId: ModuleId): number {
-    return [...this.jobs.values()].filter((j) => j.started && j.plan.moduleId === moduleId && ACTIVE_STATUSES.includes(j.snap.status)).length;
+    return [...this.jobs.values()].filter((j) => j.started && j.plan.moduleId === moduleId && isJobRunning(j.snap)).length;
   }
 
   private totalRunning(): number {
-    return [...this.jobs.values()].filter((j) => j.started && ACTIVE_STATUSES.includes(j.snap.status)).length;
+    return [...this.jobs.values()].filter((j) => j.started && isJobRunning(j.snap)).length;
   }
 
   /** Start as many queued jobs as the limits allow. */
@@ -587,7 +588,7 @@ class AutomationManager extends EventEmitter {
 
   /** Any active job of this module (across all posts). */
   private moduleBusy(moduleId: ModuleId): boolean {
-    return [...this.jobs.values()].some((j) => j.plan.moduleId === moduleId && ACTIVE_STATUSES.includes(j.snap.status));
+    return [...this.jobs.values()].some((j) => j.plan.moduleId === moduleId && isJobRunning(j.snap));
   }
 
   /** Extension mode: hand the tab back (removes Chrome's debugging bar); it stays open for reuse. */
