@@ -165,7 +165,7 @@ export function useBatch() {
           draft.sharedText = item.text;
           draft.media = [item.media];
           draft.platforms = Object.fromEntries(Object.entries(template.platforms).map(([k, v]) => [k, emptyPlatformConfigFrom(v)])) as Draft['platforms'];
-          draft.youtube = { ...template.youtube, title: '', thumbnailId: null };
+          draft.youtube = { ...template.youtube, title: '', thumbnailId: null, adSuitabilityNone: false };
           draft.meta = structuredClone(template.meta);
           draft.wordpress = { ...structuredClone(template.wordpress), title: '', tags: '' };
           draft.whatsapp = structuredClone(template.whatsapp);
@@ -183,6 +183,7 @@ export function useBatch() {
         const src = prev.find((p) => p.id === id);
         if (!src) return prev;
         const copy: BatchPost = { id: newId(), title: nextTitle(prev), draft: structuredClone(src.draft) };
+        copy.draft.youtube.adSuitabilityNone = false; // your declaration about one video, not its copy
         queueMicrotask(() => setActiveId(copy.id));
         const i = prev.findIndex((p) => p.id === id);
         return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)];

@@ -230,7 +230,7 @@ export function Dashboard() {
         link: { url: '', mode: d.link.mode },
         media: [],
         coverId: null,
-        youtube: { ...d.youtube, title: '', thumbnailId: null },
+        youtube: { ...d.youtube, title: '', thumbnailId: null, adSuitabilityNone: false },
         platforms: Object.fromEntries(Object.entries(d.platforms).map(([k, v]) => [k, { ...emptyPlatformConfig(v.enabled) }])) as typeof d.platforms,
       }));
       setPending([]);

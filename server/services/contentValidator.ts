@@ -53,6 +53,7 @@ const draftSchema = z.object({
     channel: z.string().max(200),
     title: z.string().max(1000),
     thumbnailId: z.string().uuid().nullable().default(null),
+    adSuitabilityNone: z.boolean().default(false),
     audience: z.enum(['unset', 'not_kids', 'kids']),
     visibility: z.enum(['unset', 'private', 'unlisted', 'public']),
     advanceToVisibilityStep: z.boolean(),

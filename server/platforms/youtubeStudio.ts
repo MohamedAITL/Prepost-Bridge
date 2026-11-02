@@ -218,16 +218,34 @@ async function preparePost(ctx: PrepareContext) {
 }
 
 /**
+ * Tick "None of the above" and submit the rating. Only for a post where you confirmed this yourself.
+ */
+async function rateNoneOfTheAbove(page: Page) {
+  const A = YT.adSuitability;
+  await safeClick(page.locator(A.noneOfTheAbove), 'None of the above', { forbiddenSelectors: YT.forbidden });
+  const submit = page.locator(A.submit);
+  if (!(await pollUntil(async () => (await observeOnly(submit)).enabled, 10_000, 250))) throw new Error('YouTube did not accept "None of the above".');
+  await safeClick(submit, 'Submit rating', { forbiddenSelectors: YT.forbidden });
+}
+
+/**
  * Click Next up to the Visibility step. Returns null once there, or the name of the step waiting
  * for you. The step count varies: monetized channels add Rights management and Ad suitability, and
  * Next stays disabled on Ad suitability. That rating is your own declaration to YouTube (final once
- * submitted), so it's never answered here.
+ * submitted), so it's answered only when `rateNone` says you confirmed it for this video.
  */
-async function advanceToVisibility(page: Page): Promise<string | null> {
+export async function advanceToVisibility(page: Page, rateNone: boolean, onRated: () => void = () => undefined): Promise<string | null> {
   const next = page.locator(YT.nextButton);
+  let rated = false;
   for (let i = 0; i < 8; i++) {
     if (await findVisible(page, YT.visibilityStep, 0)) return null;
-    if (!(await pollUntil(async () => (await observeOnly(next)).enabled, 4000, 250))) break;
+    if (!(await pollUntil(async () => (await observeOnly(next)).enabled, 4000, 250))) {
+      if (!rateNone || rated || !(await findVisible(page, [YT.adSuitability.step], 0))) break;
+      await rateNoneOfTheAbove(page);
+      rated = true;
+      onRated();
+      continue;
+    }
     await safeClick(next, 'Next', { forbiddenSelectors: YT.forbidden });
     const e = await dialogError(page);
     if (e) throw new Error(`YouTube blocked the next step: ${e}`);
@@ -254,7 +272,7 @@ async function publishPost(ctx: PrepareContext) {
 /** Auto-publish, video: go to the Visibility step, choose the visibility (Public by default), press Publish/Save. */
 async function publishVideo(ctx: PrepareContext) {
   const { page, content } = ctx;
-  const waiting = await advanceToVisibility(page);
+  const waiting = await advanceToVisibility(page, content.youtube!.adSuitabilityNone);
   if (waiting) throw new Error(`Stopped before publishing: YouTube needs your answer on "${waiting}".`);
   const want = content.youtube!.visibility;
   const vis = want === 'unset' ? 'public' : want;
@@ -394,7 +412,9 @@ export const youtubeStudioModule: PlatformModule = {
 
     if (yt.advanceToVisibilityStep && yt.audience !== 'unset') {
       ctx.setStatus('preparing', 'Moving to the Visibility step (Next only)…', 70);
-      const waiting = await ctx.step('Move to the Visibility step', () => advanceToVisibility(page));
+      const waiting = await ctx.step('Move to the Visibility step', () =>
+        advanceToVisibility(page, yt.adSuitabilityNone, () => ctx.check('Ad suitability: "None of the above" submitted', 'pass', 'You confirmed this for this post.')),
+      );
       ctx.check('Reached Visibility step', waiting ? 'unverified' : 'pass', waiting ? `YouTube needs your answer on "${waiting}". Finish it in the tab, then go on to Visibility.` : undefined);
       if (!waiting && yt.visibility !== 'unset') {
         const sel = YT.visibility[yt.visibility];

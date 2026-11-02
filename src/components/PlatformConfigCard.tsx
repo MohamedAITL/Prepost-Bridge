@@ -307,6 +307,15 @@ export function PlatformConfigCard({ destination: d, draft, onChange, onDraftCha
               <input type="checkbox" checked={draft.youtube.advanceToVisibilityStep} onChange={(e) => setYt({ advanceToVisibilityStep: e.target.checked })} />
               Go through to the Visibility step (Save stays for you)
             </label>
+            {draft.youtube.advanceToVisibilityStep && (
+              <div className="span2">
+                <label className="option small">
+                  <input type="checkbox" checked={draft.youtube.adSuitabilityNone} onChange={(e) => setYt({ adSuitabilityNone: e.target.checked })} />
+                  Ad suitability: "None of the above" for this video
+                </label>
+                <p className="muted small">Tick only if this video has none of YouTube's listed content: inappropriate language, adult content, violence, shocking content, firearms, sensitive events, controversial issues and the like. This is your declaration to YouTube and can't be changed once submitted. It applies to this post only.</p>
+              </div>
+            )}
           </div>
         )}
 

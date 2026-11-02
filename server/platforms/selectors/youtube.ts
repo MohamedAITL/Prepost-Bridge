@@ -36,6 +36,12 @@ export const YT = {
   },
   /** "Next" moves between steps. It is the only navigation button this module clicks. */
   nextButton: 'ytcp-uploads-dialog #next-button',
+  /** Ad suitability step of monetized channels (seen 2026-11; these ids don't change with language). */
+  adSuitability: {
+    step: 'ytcp-uploads-dialog ytcp-uploads-content-ratings',
+    noneOfTheAbove: 'ytcp-uploads-dialog ytcp-checkbox-lit.all-none-checkbox #checkbox',
+    submit: 'ytcp-uploads-dialog #submit-questionnaire-button',
+  },
   /** Present on the Visibility step. */
   visibilityStep: ['ytcp-uploads-dialog ytcp-uploads-review', 'ytcp-uploads-dialog #privacy-radios'],
 

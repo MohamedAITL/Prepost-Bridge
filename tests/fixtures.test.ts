@@ -11,7 +11,7 @@ import { metaModule, publishedDialogShown } from '../server/platforms/meta';
 import { readWhatsAppChannels, whatsappModule } from '../server/platforms/whatsapp';
 import { wordpressModule } from '../server/platforms/wordpress';
 import { xModule } from '../server/platforms/x';
-import { youtubeStudioModule } from '../server/platforms/youtubeStudio';
+import { advanceToVisibility, youtubeStudioModule } from '../server/platforms/youtubeStudio';
 import { testContext } from './harness';
 
 let browser: Browser;
@@ -317,6 +317,42 @@ test('WhatsApp: a media tray left open is never discarded; a follow-only channel
   await context.close();
 });
 
+const AD_FIXTURE = `<!doctype html><meta charset="utf-8"><style>ytcp-uploads-dialog, ytcp-uploads-dialog * { display: block; min-height: 10px; } [hidden] { display: none !important; }</style>
+<ytcp-uploads-dialog>
+  <div role="tab" aria-selected="true">Ad suitability</div>
+  <ytcp-uploads-content-ratings>
+    <ytcp-checkbox-lit class="all-none-checkbox"><div id="checkbox" role="checkbox" aria-label="None of the above">None</div></ytcp-checkbox-lit>
+    <ytcp-button id="submit-questionnaire-button" aria-disabled="true">Submit rating</ytcp-button>
+  </ytcp-uploads-content-ratings>
+  <ytcp-uploads-review hidden>Visibility</ytcp-uploads-review>
+  <ytcp-button id="next-button" aria-disabled="true">Next</ytcp-button>
+</ytcp-uploads-dialog>
+<script>
+{
+  window.submitted = false;
+  const $ = (s) => document.querySelector(s);
+  $('#checkbox').addEventListener('click', () => $('#submit-questionnaire-button').setAttribute('aria-disabled', 'false'));
+  $('#submit-questionnaire-button').addEventListener('click', () => { window.submitted = true; $('ytcp-uploads-content-ratings').hidden = true; $('#next-button').setAttribute('aria-disabled', 'false'); });
+  $('#next-button').addEventListener('click', () => { $('ytcp-uploads-review').hidden = false; });
+}
+</script>`;
+
+test('YouTube Ad suitability: answered only when you confirmed it for this post', async () => {
+  const page = await browser.newPage();
+  const submitted = () => page.evaluate(() => (window as unknown as { submitted: boolean }).submitted);
+
+  await page.setContent(AD_FIXTURE);
+  assert.equal(await advanceToVisibility(page, false), 'Ad suitability');
+  assert.equal(await submitted(), false, 'without your tick the rating stays untouched');
+
+  await page.setContent(AD_FIXTURE);
+  let rated = 0;
+  assert.equal(await advanceToVisibility(page, true, () => rated++), null);
+  assert.equal(await submitted(), true);
+  assert.equal(rated, 1);
+  await page.close();
+});
+
 test('YouTube Studio counts as signed in from its address, even with nothing rendered yet', async () => {
   const context = await browser.newContext();
   // A hidden tab may leave Studio's custom elements without a size, so they never look "visible".
@@ -378,7 +414,7 @@ test('YouTube module uploads, fills title/description, sets audience, reaches Vi
     title: 'Mon titre — عنوان',
     media: [{ item: { id: 'v', name: 'clip.mp4', mime: 'video/mp4', size: 24, kind: 'video', source: 'upload' }, path: path.join(tmp, 'clip.mp4') }],
     thumbnail: null,
-    youtube: { postType: 'video', channel: '', title: 'Mon titre — عنوان', thumbnailId: null, audience: 'not_kids', visibility: 'unlisted', advanceToVisibilityStep: true },
+    youtube: { postType: 'video', channel: '', title: 'Mon titre — عنوان', thumbnailId: null, adSuitabilityNone: false, audience: 'not_kids', visibility: 'unlisted', advanceToVisibilityStep: true },
   });
   await youtubeStudioModule.prepare(ctx);
   assert.equal(await page.locator('#title-textarea #textbox').innerText(), 'Mon titre — عنوان');
@@ -434,7 +470,7 @@ test('YouTube post mode: opens Posts tab, fills text, attaches images, never cli
     text: 'Annonce 📣\nالسطر الثاني',
     media: [png('1', 'a.png'), png('2', 'b.png')],
     thumbnail: null,
-    youtube: { postType: 'post', channel: '', title: '', thumbnailId: null, audience: 'unset', visibility: 'unset', advanceToVisibilityStep: false },
+    youtube: { postType: 'post', channel: '', title: '', thumbnailId: null, adSuitabilityNone: false, audience: 'unset', visibility: 'unset', advanceToVisibilityStep: false },
   });
   await youtubeStudioModule.prepare(ctx);
   assert.match(page.url(), /\/channel\/UCtest\/posts$/);
